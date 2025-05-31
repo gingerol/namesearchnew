@@ -2,7 +2,7 @@
 from typing import List, Optional, Dict, Any
 
 from pydantic import AnyHttpUrl, validator
-from pydantic import BaseSettings
+from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):

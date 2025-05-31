@@ -59,11 +59,15 @@ async def test_token(current_user: models.User = Depends(get_current_user)) -> A
     return current_user
 
 
-@router.post("/register", response_model=User)
+from fastapi import Response
+from fastapi import status
+
+@router.post("/register", response_model=User, status_code=status.HTTP_201_CREATED)
 def create_user(
     *,
     db: Session = Depends(get_db_dep),
-    user_in: UserCreate,
+    user_in: UserCreate = Body(...),
+    response: Response
 ) -> Any:
     """
     Create new user.
@@ -77,24 +81,22 @@ def create_user(
     
     user = crud.user.create(db, obj_in=user_in)
     # TODO: Send email verification
+    response.status_code = status.HTTP_201_CREATED
     return user
 
 
-@router.post("/password-recovery/{email}", response_model=dict)
-def recover_password(email: str, db: Session = Depends(get_db_dep)) -> Any:
+@router.post("/forgot-password", status_code=status.HTTP_202_ACCEPTED, response_model=dict)
+def forgot_password(
+    user_in: dict = Body(...),
+    db: Session = Depends(get_db_dep)
+) -> Any:
     """
-    Password Recovery
+    Password Recovery: Always return 202 to prevent email enumeration.
     """
+    email = user_in.get("email")
     user = crud.user.get_by_email(db, email=email)
-    
-    if not user:
-        raise HTTPException(
-            status_code=404,
-            detail="The user with this email does not exist in the system.",
-        )
-    
-    # TODO: Send password reset email
-    return {"msg": "Password recovery email sent"}
+    # TODO: Send password reset email if user exists
+    return {"msg": "If the email exists, a password reset link will be sent"}
 
 
 @router.post("/reset-password/", response_model=dict)
@@ -106,5 +108,24 @@ def reset_password(
     """
     Reset password
     """
-    # TODO: Implement password reset logic
+    from namesearch.core.security import decode_token
+    from namesearch.core.password import get_password_hash
+    from jose import JWTError
+
+    try:
+        payload = decode_token(token)
+        email = payload.get("sub")
+        if not email:
+            raise HTTPException(status_code=400, detail="Invalid token")
+    except JWTError:
+        raise HTTPException(status_code=400, detail="Invalid token")
+
+    user = crud.user.get_by_email(db, email=email)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    user.hashed_password = get_password_hash(new_password)
+    db.add(user)
+    db.commit()
+    db.refresh(user)
     return {"msg": "Password updated successfully"}
