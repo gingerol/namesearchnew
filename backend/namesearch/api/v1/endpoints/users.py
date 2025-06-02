@@ -5,14 +5,14 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from .... import crud, models
-from ....core.security import get_current_active_superuser, get_current_user
+from ....core.security import get_current_active_superuser, get_current_user, get_password_hash
 from ....db.session import get_db
-from ....schemas.user import User, UserCreate, UserUpdate, UserInDB
+from ....schemas.user import User, UserCreate, UserUpdate, UserInDB, UserResponse
 
 router = APIRouter()
 
 
-@router.get("/", response_model=List[User])
+@router.get("/", response_model=List[UserResponse])
 def read_users(
     db: Session = Depends(get_db),
     skip: int = 0,
@@ -26,7 +26,7 @@ def read_users(
     return users
 
 
-@router.post("/", response_model=User)
+@router.post("/", response_model=UserResponse)
 def create_user(
     *,
     db: Session = Depends(get_db),
@@ -46,7 +46,7 @@ def create_user(
     return user
 
 
-@router.get("/me", response_model=User)
+@router.get("/me", response_model=UserResponse)
 def read_user_me(
     current_user: models.User = Depends(get_current_user),
 ) -> Any:
@@ -56,7 +56,7 @@ def read_user_me(
     return current_user
 
 
-@router.put("/me", response_model=User)
+@router.put("/me", response_model=UserResponse)
 def update_user_me(
     *,
     db: Session = Depends(get_db),
@@ -66,26 +66,13 @@ def update_user_me(
     """
     Update own user.
     """
-    # Handle password update separately if provided
-    if user_in.new_password:
-        if not user_in.current_password:
+    if user_in.email is not None and user_in.email != current_user.email:
+        user = crud.user.get_by_email(db, email=user_in.email)
+        if user:
             raise HTTPException(
                 status_code=400,
-                detail="Current password is required to set a new password",
+                detail="The user with this email already exists in the system.",
             )
-        if not crud.user.authenticate(
-            db, email=current_user.email, password=user_in.current_password
-        ):
-            raise HTTPException(status_code=400, detail="Incorrect password")
-        
-        # Update password
-        current_user.hashed_password = crud.user.get_password_hash(user_in.new_password)
-        db.add(current_user)
-        db.commit()
-        db.refresh(current_user)
-        
-        # Remove password from update data
-        user_in = user_in.dict(exclude_unset=True)
         user_in.pop("current_password", None)
         user_in.pop("new_password", None)
         user_in = UserUpdate(**user_in)
@@ -94,7 +81,7 @@ def update_user_me(
     return user
 
 
-@router.get("/{user_id}", response_model=User)
+@router.get("/{user_id}", response_model=UserResponse)
 def read_user_by_id(
     user_id: int,
     current_user: models.User = Depends(get_current_user),
@@ -113,7 +100,7 @@ def read_user_by_id(
     return user
 
 
-@router.put("/{user_id}", response_model=User)
+@router.put("/{user_id}", response_model=UserResponse)
 def update_user(
     *,
     db: Session = Depends(get_db),

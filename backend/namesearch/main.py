@@ -1,23 +1,36 @@
 """Main FastAPI application module."""
-from fastapi import FastAPI, Depends
+import asyncio
+from fastapi import FastAPI, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.orm import Session
+from contextlib import asynccontextmanager
 
+from . import models
+from .api.v1.api import api_router
 from .core.config import settings
+from .db.session import engine, SessionLocal
+from .services.domain_monitor import get_domain_monitor
 from .db.base import Base
-from .db.session import engine
-from .api.v1 import api_router
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: Initialize domain monitor
+    monitor = get_domain_monitor()
+    asyncio.create_task(monitor.start())
+    yield
+    # Shutdown: Clean up
+    await monitor.stop()
+
 app = FastAPI(
-    title="Namesearch.io API",
+    title=settings.PROJECT_NAME,
     description="API for Namesearch.io - AI-powered brand and domain name intelligence",
     version="0.1.0",
     docs_url="/api/docs",
     redoc_url="/api/redoc",
-    openapi_url="/api/openapi.json",
+    openapi_url=f"{settings.API_V1_STR}/openapi.json",
+    lifespan=lifespan
 )
 
 # CORS middleware configuration

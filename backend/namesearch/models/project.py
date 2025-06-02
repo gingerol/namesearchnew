@@ -6,7 +6,7 @@ from enum import Enum
 from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text, Boolean, JSON
 from sqlalchemy.orm import relationship
 
-from ..db.base import Base
+from .base import Base
 
 
 class ProjectStatus(str, Enum):
@@ -29,6 +29,9 @@ class Project(Base):
     
     __tablename__ = "projects"
     
+    # Primary key
+    id = Column(Integer, primary_key=True, index=True)
+    
     # Project metadata
     name = Column(String(255), nullable=False)
     description = Column(Text, nullable=True)
@@ -40,13 +43,13 @@ class Project(Base):
     
     # Relationships
     owner_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    owner = relationship("User", back_populates="projects")
+    owner = relationship("namesearch.models.user.User", back_populates="projects")
     
     # Timestamps
     last_accessed_at = Column(DateTime, default=datetime.utcnow)
     
     # Relationships
-    searches = relationship("Search", back_populates="project")
+    searches = relationship("namesearch.models.domain.Search", back_populates="project")
     
     def __repr__(self) -> str:
         return f"<Project {self.name} ({self.status})>"
@@ -56,6 +59,9 @@ class ProjectMember(Base):
     """Project members model for collaboration."""
     
     __tablename__ = "project_members"
+    
+    # Primary key
+    id = Column(Integer, primary_key=True, index=True)
     
     # Relationships
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
