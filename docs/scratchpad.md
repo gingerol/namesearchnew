@@ -13,7 +13,7 @@
 ### Phase 1: Core Search Enhancement (Week 1-2)
 
 #### WHOIS Search Implementation
-- [ ] Basic Infrastructure Setup
+- [ ] Backend Infrastructure
   - [ ] Basic FastAPI setup
   - [ ] Simple PostgreSQL connection
   - [ ] Basic error handling
@@ -39,6 +39,44 @@
   - [ ] Unit tests for WHOIS service
   - [ ] Basic API tests
   - [ ] Error handling tests
+
+#### Frontend Components (Phase 1)
+- [ ] Update DomainSearch.tsx
+  - [ ] Add WHOIS lookup button
+  - [ ] Add loading state
+  - [ ] Add error handling
+  - [ ] Integrate React Query
+
+- [ ] Update DomainResults.tsx
+  - [ ] Add WHOIS data display
+  - [ ] Add loading skeleton
+  - [ ] Add error message display
+  - [ ] Implement caching
+
+- [ ] New Component: BulkDomainChecker
+  - [ ] Basic interface
+  - [ ] Bulk check functionality
+  - [ ] Error handling
+  - [ ] Loading states
+
+#### Frontend Components (Phase 2)
+- [ ] New Component: DomainAnalysisPanel
+  - [ ] Risk score display
+  - [ ] Similar domains list
+  - [ ] Jurisdiction info
+  - [ ] Analytics tracking
+
+- [ ] Update AdvancedSearchPanel
+  - [ ] WHOIS-specific filters
+  - [ ] Bulk check options
+  - [ ] Analysis options
+
+#### Frontend Components (Phase 3)
+- [ ] Admin Dashboard Features
+  - [ ] WHOIS server config
+  - [ ] Request monitoring
+  - [ ] Rate limiting settings
+  - [ ] Analytics dashboard
 
 #### Advanced Search Filters
 #### Advanced Search Filters
