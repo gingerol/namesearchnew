@@ -7,7 +7,7 @@ from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, JSON, Bool
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
-from ..db.base import Base
+from .base import Base
 
 
 class TLDType(str, Enum):
@@ -42,6 +42,9 @@ class Domain(Base):
     
     __tablename__ = "domains"
     
+    # Primary key
+    id = Column(Integer, primary_key=True, index=True)
+    
     # Domain identification
     name = Column(String(255), unique=True, index=True, nullable=False)
     tld = Column(String(63), nullable=False)
@@ -57,7 +60,7 @@ class Domain(Base):
     whois_last_updated = Column(DateTime, nullable=True)
     
     # Relationships
-    searches = relationship("SearchResult", back_populates="domain")
+    searches = relationship("namesearch.models.domain.SearchResult", back_populates="domain")
     
     def __repr__(self) -> str:
         return f"<Domain {self.name}>"
@@ -67,6 +70,9 @@ class SearchResult(Base):
     """Search result model linking users, searches, and domains."""
     
     __tablename__ = "search_results"
+    
+    # Primary key
+    id = Column(Integer, primary_key=True, index=True)
     
     # Relationships
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
@@ -78,9 +84,9 @@ class SearchResult(Base):
     notes = Column(String(1000), nullable=True)
     
     # Relationships
-    user = relationship("User", back_populates="search_results")
-    search = relationship("Search", back_populates="results")
-    domain = relationship("Domain", back_populates="searches")
+    user = relationship("namesearch.models.user.User", back_populates="search_results")
+    search = relationship("namesearch.models.domain.Search", back_populates="results")
+    domain = relationship("namesearch.models.domain.Domain", back_populates="searches")
     
     def __repr__(self) -> str:
         return f"<SearchResult {self.id} for {self.domain.name}>"
@@ -90,6 +96,9 @@ class Search(Base):
     """Search model for tracking domain searches."""
     
     __tablename__ = "searches"
+    
+    # Primary key
+    id = Column(Integer, primary_key=True, index=True)
     
     # Search metadata
     query = Column(String(255), nullable=False)
@@ -109,9 +118,9 @@ class Search(Base):
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=True)  # Optional project association
     
     # Relationships
-    user = relationship("User", back_populates="searches")
-    project = relationship("Project", back_populates="searches")
-    results = relationship("SearchResult", back_populates="search")
+    user = relationship("namesearch.models.user.User", back_populates="searches")
+    project = relationship("namesearch.models.project.Project", back_populates="searches")
+    results = relationship("namesearch.models.domain.SearchResult", back_populates="search")
     
     def __repr__(self) -> str:
         return f"<Search {self.id} for '{self.query}'>"

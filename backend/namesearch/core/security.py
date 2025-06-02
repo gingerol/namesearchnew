@@ -1,17 +1,23 @@
 """Security utilities for authentication and authorization."""
+import logging
+import secrets
 from datetime import datetime, timedelta
 from typing import Any, Optional, Union, Dict
 
-from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi import Depends, HTTPException, status, Request
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
-from pydantic import ValidationError
+from pydantic import ValidationError, EmailStr
 from sqlalchemy.orm import Session
+from jose.constants import ALGORITHMS
 
 from .. import models, schemas
 from ..db.session import get_db
 from .config import settings
 from .password import pwd_context, verify_password, get_password_hash
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 # OAuth2 scheme
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.API_V1_STR}/login/access-token")
@@ -137,7 +143,11 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     Returns:
         bool: True if the password is valid, False otherwise.
     """
-    return pwd_context.verify(plain_password, hashed_password)
+    try:
+        return pwd_context.verify(plain_password, hashed_password)
+    except Exception as e:
+        logger.error(f"Error verifying password: {str(e)}")
+        return False
 
 def get_password_hash(password: str) -> str:
     """
@@ -150,6 +160,61 @@ def get_password_hash(password: str) -> str:
         str: The hashed password.
     """
     return pwd_context.hash(password)
+
+def validate_password_strength(password: str) -> bool:
+    """
+    Validate password strength.
+    
+    Args:
+        password: The password to validate.
+        
+    Returns:
+        bool: True if the password meets strength requirements.
+        
+    Raises:
+        ValueError: If the password doesn't meet strength requirements.
+    """
+    if len(password) < 8:
+        raise ValueError("Password must be at least 8 characters long")
+    if not any(c.isupper() for c in password):
+        raise ValueError("Password must contain at least one uppercase letter")
+    if not any(c.islower() for c in password):
+        raise ValueError("Password must contain at least one lowercase letter")
+    if not any(c.isdigit() for c in password):
+        raise ValueError("Password must contain at least one number")
+    return True
+
+def generate_password_reset_token(email: str) -> str:
+    """
+    Generate a password reset token.
+    
+    Args:
+        email: The email to generate the token for.
+        
+    Returns:
+        str: The generated token.
+    """
+    return create_token(
+        subject=email,
+        token_type="reset_password",
+        expires_delta=timedelta(hours=1),
+    )
+
+def verify_password_reset_token(token: str) -> Optional[str]:
+    """
+    Verify a password reset token and return the email if valid.
+    
+    Args:
+        token: The password reset token.
+        
+    Returns:
+        Optional[str]: The email if the token is valid, None otherwise.
+    """
+    try:
+        payload = verify_token(token, token_type="reset_password")
+        return payload.get("sub")
+    except JWTError:
+        return None
 
 def decode_token(token: str) -> dict:
     """

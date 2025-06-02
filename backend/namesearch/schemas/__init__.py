@@ -4,6 +4,7 @@ from .user import User, UserCreate, UserInDB, UserUpdate, UserInDBBase, UserResp
 from .domain import DomainCreate, DomainUpdate, DomainInDB, DomainResponse, DomainBulkSearchResponse, DomainSearchResult
 from .project import ProjectCreate, ProjectUpdate, ProjectInDB, ProjectResponse, ProjectMemberCreate, ProjectMemberUpdate, ProjectMemberResponse
 from .search import Search, SearchCreate, SearchUpdate, SearchInDB, SearchResponse, SearchResult, SearchResultCreate, SearchResultUpdate, SearchResultResponse
+from .domain_watch import DomainWatch, DomainWatchCreate, DomainWatchUpdate, DomainWatchInDB, DomainWatchInDBBase
 
 __all__ = [
     # Token schemas
@@ -47,4 +48,11 @@ __all__ = [
     'SearchResultCreate',
     'SearchResultUpdate',
     'SearchResultResponse',
+    
+    # Domain Watch schemas
+    'DomainWatch',
+    'DomainWatchCreate',
+    'DomainWatchUpdate',
+    'DomainWatchInDB',
+    'DomainWatchInDBBase',
 ]

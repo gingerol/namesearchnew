@@ -5,6 +5,8 @@ from sqlalchemy.orm import Session
 from .... import crud, models
 from ....core.security import get_current_active_superuser
 from ....db.session import get_db
+from ....schemas.user import UserResponse
+from ....schemas.project import ProjectResponse
 
 router = APIRouter()
 
@@ -24,7 +26,7 @@ def get_dashboard_stats(
         "project_count": project_count,
     }
 
-@router.get("/users", response_model=List[models.User])
+@router.get("/users", response_model=List[UserResponse])
 def get_all_users(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_active_superuser),
@@ -34,7 +36,7 @@ def get_all_users(
     """
     return crud.user.get_multi(db)
 
-@router.get("/projects", response_model=List[models.Project])
+@router.get("/projects", response_model=List[ProjectResponse])
 def get_all_projects(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_active_superuser),

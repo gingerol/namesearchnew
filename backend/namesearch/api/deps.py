@@ -7,11 +7,11 @@ from jose import jwt
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
-from ...core.config import settings
-from ...core.security import decode_token
-from ...db.session import SessionLocal
-from ...models.user import User
-from ...schemas.user import TokenData
+from namesearch.core.config import settings
+from namesearch.core.security import decode_token
+from namesearch.db.session import SessionLocal
+from namesearch.models.user import User
+from namesearch.schemas.user import TokenData
 
 reusable_oauth2 = OAuth2PasswordBearer(
     tokenUrl=f"{settings.API_V1_STR}/auth/login"

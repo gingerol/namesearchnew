@@ -1,50 +1,85 @@
-import { BrowserRouter as Router, Routes, Route, Link, Navigate } from "react-router-dom";
-import AdminDashboard from "./features/admin/AdminDashboard";
-import { DomainSearchPage } from "./features/domain-search/components/DomainSearchPage";
+import { BrowserRouter as Router, Routes, Route, Navigate, Outlet } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { Toaster } from 'react-hot-toast';
+import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
+
+// Layouts
+import { Layout } from './components/layout/Layout';
+import { AdminLayout } from './components/layout/AdminLayout';
+
+// Auth
+import { LoginPage } from './features/auth/LoginPage';
+import { SignUpPage } from './features/auth/SignUpPage';
+
+// Main App
+import { DashboardPage } from './features/dashboard/DashboardPage';
+import { DomainSearchPage } from './features/search/DomainSearchPage';
+import { ProjectsPage } from './features/projects/ProjectsPage';
+import { WatchlistPage } from './features/watchlist/WatchlistPage';
+import { TrendsPage } from './features/trends/TrendsPage';
+import { AnalysisPage } from './features/analysis/AnalysisPage';
+
+// Admin
+import { AdminDashboard } from './features/admin/AdminDashboard';
+import { UserManagement } from './features/admin/UserManagement';
+import { AdminProjects } from './features/admin/AdminProjects';
+import { AnalyticsPage } from './features/admin/AnalyticsPage';
+import { SystemSettings } from './features/admin/SystemSettings';
+import { ApiKeys } from './features/admin/ApiKeys';
+import { SystemLogs } from './features/admin/SystemLogs';
+
+// Error
+import { NotFoundPage } from './features/error/NotFoundPage';
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 5 * 60 * 1000, // 5 minutes
+      retry: 1,
+    },
+  },
+});
 
 function App() {
-  return (
-    <Router>
-      <div className="min-h-screen bg-gray-50">
-        <nav className="bg-white shadow-sm">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex justify-between h-16">
-              <div className="flex">
-                <div className="flex-shrink-0 flex items-center">
-                  <Link to="/" className="text-xl font-bold text-indigo-600">
-                    Namesearch.io
-                  </Link>
-                </div>
-                <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
-                  <Link
-                    to="/search"
-                    className="border-indigo-500 text-gray-900 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
-                  >
-                    Domain Search
-                  </Link>
-                </div>
-              </div>
-              <div className="hidden sm:ml-6 sm:flex sm:items-center">
-                <Link
-                  to="/admin"
-                  className="text-gray-700 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium"
-                >
-                  Admin Dashboard
-                </Link>
-              </div>
-            </div>
-          </div>
-        </nav>
+  // In a real app, you would check for an auth token here
+  const isAuthenticated = false; // Will be replaced with actual auth check
 
-        <main>
-          <Routes>
-            <Route path="/" element={<Navigate to="/search" replace />} />
-            <Route path="/search" element={<DomainSearchPage />} />
-            <Route path="/admin" element={<AdminDashboard />} />
-          </Routes>
-        </main>
-      </div>
-    </Router>
+  return (
+    <QueryClientProvider client={queryClient}>
+      <Router>
+        <Routes>
+          {/* Public routes */}
+          <Route path="/" element={isAuthenticated ? <Navigate to="/dashboard" /> : <Navigate to="/search" />} />
+          <Route path="/login" element={isAuthenticated ? <Navigate to="/dashboard" /> : <LoginPage />} />
+          <Route path="/signup" element={isAuthenticated ? <Navigate to="/dashboard" /> : <SignUpPage />} />
+          <Route path="/search" element={<DomainSearchPage />} />
+          
+          {/* Protected routes - require authentication */}
+          <Route path="/" element={isAuthenticated ? <Layout><Outlet /></Layout> : <Navigate to="/search" />}>
+            <Route index element={<DashboardPage />} />
+            <Route path="dashboard" element={<DashboardPage />} />
+            <Route path="projects" element={<ProjectsPage />} />
+            <Route path="projects/:projectId" element={<DomainSearchPage />} />
+            <Route path="watchlist" element={<WatchlistPage />} />
+            <Route path="trends" element={<TrendsPage />} />
+            <Route path="analysis" element={<AnalysisPage />} />
+            <Route path="admin" element={<AdminLayout><Outlet /></AdminLayout>}>
+              <Route index element={<AdminDashboard />} />
+              <Route path="users" element={<UserManagement />} />
+              <Route path="projects" element={<AdminProjects />} />
+              <Route path="analytics" element={<AnalyticsPage />} />
+              <Route path="settings" element={<SystemSettings />} />
+              <Route path="api-keys" element={<ApiKeys />} />
+              <Route path="logs" element={<SystemLogs />} />
+            </Route>
+            <Route path="*" element={<NotFoundPage />} />
+          </Route>
+        </Routes>
+      </Router>
+      
+      <ReactQueryDevtools initialIsOpen={false} />
+      <Toaster position="top-right" />
+    </QueryClientProvider>
   );
 }
 

@@ -1,13 +1,20 @@
 """User database model."""
 from datetime import datetime
-from typing import Optional
+from typing import List, Optional, TYPE_CHECKING
 
-from pydantic import BaseModel
-from sqlalchemy import Boolean, Column, DateTime, Integer, String
-from sqlalchemy.orm import relationship
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, ForeignKey, event
+from sqlalchemy.orm import relationship, backref
 
-from ..db.base import Base
+from namesearch.models.base import Base
+
+# Import password functions at the top level
 from ..core.password import get_password_hash, verify_password
+
+# Use TYPE_CHECKING for type hints only
+if TYPE_CHECKING:
+    from .domain_watch import DomainWatch
+    from .project import Project
+    from .domain import Search, SearchResult
 
 
 class User(Base):
@@ -15,17 +22,22 @@ class User(Base):
     
     __tablename__ = "users"
     
+    id = Column(Integer, primary_key=True, index=True)
     email = Column(String(255), unique=True, index=True, nullable=False)
     hashed_password = Column(String(255), nullable=False)
     full_name = Column(String(255), nullable=True)
     is_active = Column(Boolean(), default=True)
     is_superuser = Column(Boolean(), default=False)
     last_login = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
     
-    # Relationships
-    projects = relationship("Project", back_populates="owner")
-    search_results = relationship("SearchResult", back_populates="user")
-    searches = relationship("Search", back_populates="user")
+    # Relationships - using string literals with full module paths to avoid circular imports
+    projects = relationship("namesearch.models.project.Project", back_populates="owner", cascade="all, delete-orphan", lazy='selectin')
+    domain_watches = relationship("namesearch.models.domain_watch.DomainWatch", back_populates="user", cascade="all, delete-orphan", lazy='selectin')
+    search_results = relationship("namesearch.models.domain.SearchResult", back_populates="user", lazy='selectin')
+    searches = relationship("namesearch.models.domain.Search", back_populates="user", lazy='selectin')
+    notifications = relationship("namesearch.models.notification.Notification", back_populates="user", cascade="all, delete-orphan", lazy='selectin')
     
     def set_password(self, password: str) -> None:
         """Set the hashed password."""
@@ -41,42 +53,3 @@ class User(Base):
     
     def __repr__(self) -> str:
         return f"<User {self.email}>"
-
-
-class UserCreate(BaseModel):
-    """Schema for user creation."""
-    email: str
-    password: str
-    full_name: Optional[str] = None
-    
-    class Config:
-        from_attributes = True
-
-
-class UserUpdate(BaseModel):
-    """Schema for user updates."""
-    email: Optional[str] = None
-    password: Optional[str] = None
-    full_name: Optional[str] = None
-    is_active: Optional[bool] = None
-    
-    class Config:
-        from_attributes = True
-
-
-class UserInDB(Base):
-    """User model for database operations."""
-    __tablename__ = "users_in_db"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    email = Column(String(255), unique=True, index=True, nullable=False)
-    hashed_password = Column(String(255), nullable=False)
-    full_name = Column(String(255), nullable=True)
-    is_active = Column(Boolean(), default=True)
-    is_superuser = Column(Boolean(), default=False)
-    last_login = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
-    
-    class Config:
-        from_attributes = True
