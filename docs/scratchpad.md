@@ -1,6 +1,6 @@
 # Namesearch.io Development Scratchpad
 
-*Last updated: 2025-05-31 11:20 PM*
+*Last updated: 2025-06-02 15:12 PM*
 
 ## 🎯 Current Focus
 - Implementing comprehensive domain search features
@@ -11,6 +11,36 @@
 ## 🚀 Domain Search Implementation Plan
 
 ### Phase 1: Core Search Enhancement (Week 1-2)
+
+#### WHOIS Search Implementation
+- [ ] Basic Infrastructure Setup
+  - [ ] Basic FastAPI setup
+  - [ ] Simple PostgreSQL connection
+  - [ ] Basic error handling
+  - [ ] Basic logging
+
+- [ ] Core WHOIS Service
+  - [ ] Basic WHOIS command execution
+  - [ ] Input validation
+  - [ ] Rate limiting
+  - [ ] Error response handling
+
+- [ ] Basic API Endpoints
+  - [ ] /api/v1/domains/check (basic WHOIS lookup)
+  - [ ] /api/v1/domains/available (simple availability check)
+
+- [ ] Error Handling
+  - [ ] Basic input validation
+  - [ ] Rate limiting
+  - [ ] Error response formatting
+  - [ ] Basic logging
+
+- [ ] Testing
+  - [ ] Unit tests for WHOIS service
+  - [ ] Basic API tests
+  - [ ] Error handling tests
+
+#### Advanced Search Filters
 #### Advanced Search Filters
 - [ ] Price range filtering
 - [ ] Domain length filters (min/max)
