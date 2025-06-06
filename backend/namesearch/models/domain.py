@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import List, Optional
 from enum import Enum
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, JSON, Boolean, Enum as SQLEnum, Text
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, JSON, Boolean, Enum as SQLEnum, Text, Float
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -46,15 +46,34 @@ class Domain(Base):
     id = Column(Integer, primary_key=True, index=True)
     
     # Domain identification
-    name = Column(String(255), unique=True, index=True, nullable=False)
-    tld = Column(String(63), nullable=False)
-    tld_type = Column(SQLEnum(TLDType), nullable=False)
+    domain_name_full = Column(String(255), unique=True, index=True, nullable=False, comment="Full domain name, e.g., example.com")
+    name_part = Column(String(190), index=True, nullable=False, comment="The part of the domain name before the TLD, e.g., 'example'") # Max length of domain label is 63, but keep it reasonable for most cases. Sum of labels + dots <= 253.
+    tld_part = Column(String(63), index=True, nullable=False, comment="The TLD part of the domain, e.g., 'com' (without the dot)")
+    name_part_length = Column(Integer, index=True, nullable=False, comment="Length of the name_part")
+    tld_type = Column(SQLEnum(TLDType), nullable=False, index=True)
     
     # Domain status
     status = Column(SQLEnum(DomainStatus), default=DomainStatus.UNKNOWN, nullable=False)
     is_premium = Column(Boolean, default=False, nullable=False)
     is_available = Column(Boolean, default=False, nullable=False)
     
+    # Pricing
+    price = Column(Float, nullable=True, index=True, comment="Price of the domain, if applicable")
+    currency = Column(String(10), default="USD", nullable=True, comment="Currency of the price (e.g., USD, EUR)")
+
+    # Dates & Age
+    registered_date = Column(DateTime, nullable=True, index=True, comment="Date the domain was registered")
+    # expiration_date can be derived from WHOIS or stored if frequently needed for filtering
+
+    # Metrics & Scores
+    quality_score = Column(Float, nullable=True, index=True, comment="A generic quality score, 0-100")
+    seo_score = Column(Float, nullable=True, index=True, comment="SEO score, 0-100")
+    search_volume = Column(Integer, nullable=True, index=True, comment="Estimated monthly search volume")
+    cpc = Column(Float, nullable=True, index=True, comment="Estimated Cost Per Click")
+
+    # Language
+    language = Column(String(10), nullable=True, index=True, comment="Detected language of the domain content or target audience (e.g., 'en', 'es')")
+
     # WHOIS data
     whois_data = Column(JSON, nullable=True)
     whois_last_updated = Column(DateTime, nullable=True)
@@ -63,7 +82,7 @@ class Domain(Base):
     searches = relationship("namesearch.models.domain.SearchResult", back_populates="domain")
     
     def __repr__(self) -> str:
-        return f"<Domain {self.name}>"
+        return f"<Domain {self.domain_name_full}>"
 
 
 class SearchResult(Base):
