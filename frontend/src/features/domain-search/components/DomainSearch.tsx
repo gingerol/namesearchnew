@@ -1,13 +1,18 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useDebounce } from '../../../hooks/useDebounce';
-import { domainSearchApi } from '../api';
-import type { DomainSearchResult, DomainAnalysis, SearchFilters } from '../types';
-import { Search, Loader2, SlidersHorizontal } from 'lucide-react';
+import { Search as SearchIcon, X } from 'lucide-react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import { AdvancedSearchPanel } from './AdvancedSearchPanel';
+import { domainSearchApi } from '../api';
+import type { 
+  DomainSearchResult, 
+  FilteredDomainInfoFE, 
+  WhoisData,
+  SearchFilters
+} from '../types';
 
+// Popular TLDs to offer in the quick selector
 const POPULAR_TLDS = [
   'com', 'net', 'org', 'io', 'co', 'ai', 'app', 'dev',
-  'me', 'us', 'ca', 'uk', 'de', 'in', 'xyz', 'tech'
+  'me', 'us', 'ca', 'uk', 'de', 'in', 'xyz', 'tech', 'ng'
 ];
 
 interface DomainSearchProps {
@@ -29,13 +34,57 @@ export const DomainSearch: React.FC<DomainSearchProps> = ({
   initialTlds = ['com', 'io', 'co', 'ai'],
   initialFilters = {}
 }) => {
-  // Advanced search panel state
+  // Component state
+  const [isWhois, setIsWhois] = useState(false);
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
+  const [isWhoisSearching, setIsWhoisSearching] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState(initialQuery);
+  const [selectedTlds, setSelectedTlds] = useState<string[]>(initialTlds);
   const [activeFilters, setActiveFilters] = useState<Partial<SearchFilters>>(initialFilters);
   const panelRef = useRef<HTMLDivElement>(null);
-  
+
+  // Initialize state from props once when component mounts
+  useEffect(() => {
+    // Only update if the props have changed
+    if (initialQuery && initialQuery !== query) {
+      console.log('Updating query from props:', initialQuery);
+      setQuery(initialQuery);
+    }
+    
+    // Only update TLDs if they've changed and we're not already in the middle of a state update
+    if (initialTlds && JSON.stringify(initialTlds) !== JSON.stringify(selectedTlds)) {
+      console.log('Updating TLDs from props:', initialTlds);
+      setSelectedTlds(initialTlds);
+    }
+  }, [initialQuery, initialTlds]);
+
+  // Escape key handling
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isSearching) {
+        setIsSearching(false);
+        setError('Search cancelled');
+      }
+    };
+
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [isSearching]);
+
+  // Debug logging - only in development
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'development') {
+      console.log('AdvancedSearchPanel isOpen:', isAdvancedOpen);
+      console.log('Active filters:', activeFilters);
+    }
+  }, [isAdvancedOpen, activeFilters]);
+
   // Close panel when clicking outside
   useEffect(() => {
+    if (!isAdvancedOpen) return;
+    
     const handleClickOutside = (event: MouseEvent) => {
       if (panelRef.current && !panelRef.current.contains(event.target as Node)) {
         setIsAdvancedOpen(false);
@@ -45,307 +94,399 @@ export const DomainSearch: React.FC<DomainSearchProps> = ({
     document.addEventListener('mousedown', handleClickOutside);
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [isAdvancedOpen]);
+
+  // Handle search
+  // Helper function to adapt WhoisData to DomainSearchResult format
+  const adaptWhoisToDomainResult = (whoisData: WhoisData): DomainSearchResult => {
+    // Extract domain and TLD
+    const domainParts = whoisData.domain.split('.');
+    const tld = domainParts.length > 1 ? domainParts[domainParts.length - 1] : '';
+    
+    return {
+      domain: whoisData.domain,
+      tld: tld,
+      is_available: whoisData.available,
+      is_premium: false, // Default value as WhoisData doesn't have premium info
+      price: undefined,
+      analysis: {
+        linguistic: {
+          score: 0,
+          is_pronounceable: true,
+          syllable_count: 0,
+          word_count: 0
+        },
+        brand_archetype: 'unknown',
+        brand_confidence: 0,
+        trademark_risk: 'low'
+      }
     };
-  }, []);
-  const [query, setQuery] = useState(initialQuery);
-  const [selectedTlds, setSelectedTlds] = useState<string[]>(initialTlds);
-  const [suggestions, setSuggestions] = useState<string[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
-
-  const [error, setError] = useState<string | null>(null);
+  };
   
-  // Update local state when props change
-  useEffect(() => {
-    if (initialQuery) setQuery(initialQuery);
-    if (initialTlds) setSelectedTlds(initialTlds);
-  }, [initialQuery, initialTlds]);
-  
-  const debouncedQuery = useDebounce(query, 300);
-
-  // Fetch suggestions when query changes
-  useEffect(() => {
-    if (debouncedQuery.length > 2) {
-      fetchSuggestions(debouncedQuery);
-    } else {
-      setSuggestions([]);
+  // Helper function to adapt FilteredDomainInfoFE to DomainSearchResult format
+  const adaptFilteredToDomainResult = (domainInfo: any): DomainSearchResult => {
+    console.log('Adapting domain info:', domainInfo);
+    
+    // Handle the new API format where domain and tld are separate properties
+    if (domainInfo.domain && domainInfo.tld) {
+      return {
+        domain: domainInfo.domain,
+        tld: domainInfo.tld,
+        is_available: domainInfo.is_available || false,
+        is_premium: domainInfo.is_premium || false,
+        price: domainInfo.price,
+        analysis: {
+          linguistic: {
+            score: domainInfo.quality_score || 0,
+            is_pronounceable: true,
+            syllable_count: 0,
+            word_count: 1
+          },
+          brand_archetype: 'generic',
+          brand_confidence: domainInfo.seo_score || 0,
+          trademark_risk: 'low' as const
+        }
+      };
     }
-  }, [debouncedQuery]);
-
-  const fetchSuggestions = async (searchQuery: string) => {
-    try {
-      const results = await domainSearchApi.getSuggestions(searchQuery, 5);
-      setSuggestions(results);
-      setError(null);
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch suggestions';
-      setError(errorMessage);
-      onSearchError?.(errorMessage);
-      console.error('Fetch suggestions error:', err);
+    
+    // Fallback to legacy format handling
+    const domainName = domainInfo.domain_name_full || 
+                     (domainInfo.name_part && domainInfo.tld_part 
+                      ? `${domainInfo.name_part}.${domainInfo.tld_part}` 
+                      : '');
+    
+    // Ensure we have a valid domain format
+    if (!domainName || !domainName.includes('.')) {
+      console.warn('Invalid domain format in response:', domainInfo);
+      // Return a fallback that won't break the UI
+      return {
+        domain: 'invalid-domain',
+        tld: 'com',
+        is_available: false,
+        is_premium: false,
+        analysis: {
+          linguistic: {
+            score: 0,
+            is_pronounceable: false,
+            syllable_count: 0,
+            word_count: 0
+          },
+          brand_archetype: 'unknown',
+          brand_confidence: 0,
+          trademark_risk: 'low' as const
+        }
+      };
     }
+    
+    // Extract the domain and TLD parts
+    const domainParts = domainName.split('.');
+    const domain = domainParts[0];
+    const tld = domainParts.slice(1).join('.');
+    
+    return {
+      domain: domain,
+      tld: tld || 'com',
+      is_available: domainInfo.is_available || false,
+      is_premium: domainInfo.is_premium || false,
+      price: domainInfo.price,
+      analysis: {
+        linguistic: {
+          score: domainInfo.quality_score || 0,
+          is_pronounceable: true,
+          syllable_count: 0,
+          word_count: 1
+        },
+        brand_archetype: 'generic',
+        brand_confidence: domainInfo.seo_score || 0,
+        trademark_risk: 'low' as const
+      }
+    };
   };
 
-  const handleSearch = useCallback(async (e: React.FormEvent) => {
-    e.preventDefault();
-    const searchQuery = query.trim();
-    if (!searchQuery || selectedTlds.length === 0) return;
+  const handleSearch = useCallback(async () => {
+    if (!query) return;
     
-    setIsSearching(true);
-    setError(null);
-    
-    // Apply filters if any are active
-    const filtersToApply = Object.keys(activeFilters).length > 0 
-      ? { ...activeFilters, tlds: selectedTlds }
-      : undefined;
-      
-    onSearchStart(searchQuery, selectedTlds, filtersToApply);
+    console.log('Initiating search with query:', query, 'and TLDs:', selectedTlds);
     
     try {
-      // Search for each selected TLD
-      const searchPromises = selectedTlds.map(async (tld) => {
-        const domain = `${searchQuery}.${tld}`.toLowerCase();
-        const isAvailable = await domainSearchApi.checkAvailability(domain);
+      if (isWhois) {
+        // WHOIS search
+        setIsWhoisSearching(true);
+        setError(null);
+        onSearchStart(query, selectedTlds, activeFilters);
         
-        // Create a basic domain analysis (in a real app, this would come from the API)
-        const analysis: DomainAnalysis = {
-          linguistic: {
-            score: Math.floor(Math.random() * 100) / 10 + 7, // Random score 7-17
-            is_pronounceable: true,
-            syllable_count: Math.ceil(searchQuery.length / 3),
-            word_count: searchQuery.split(/\s+/).filter(Boolean).length || 1,
-          },
-          brand_archetype: 'Creator',
-          brand_confidence: 0.8,
-          trademark_risk: 'low' as const,
-        };
+        console.log('Initiating WHOIS search for:', query);
+        const domainToCheck = query.includes('.') ? query : 
+                               selectedTlds.length > 0 ? `${query}.${selectedTlds[0]}` : `${query}.com`;
         
-        return {
-          domain,
-          tld,
-          is_available: isAvailable,
-          is_premium: false,
-          price: isAvailable ? 14.99 : undefined,
-          analysis,
-        } as DomainSearchResult;
-      });
-      
-      const results = await Promise.all(searchPromises);
-      onSearchComplete(results);
+        const response = await domainSearchApi.whois(domainToCheck);
+        
+        console.log('WHOIS response received:', response);
+        
+        if (!response || typeof response !== 'object') {
+          throw new Error('Invalid WHOIS response format');
+        }
+        
+        // Adapt WHOIS data to DomainSearchResult format
+        const adaptedResult = adaptWhoisToDomainResult(response);
+        console.log('Adapted WHOIS result:', adaptedResult);
+        onSearchComplete([adaptedResult]);
+      } else {
+        // Domain search
+        setIsSearching(true);
+        setError(null);
+        onSearchStart(query, selectedTlds, activeFilters);
+        
+        // Prepare search parameters
+        const searchParams: any = {};
+        
+        // Only include query if it's not empty
+        if (query) {
+          searchParams.query = query;
+        }
+        
+        // Always include TLDs, fallback to common ones if none selected
+        searchParams.tlds = selectedTlds.length > 0 ? selectedTlds : ['com', 'io', 'ai'];
+        
+        // Include any advanced filters
+        Object.assign(searchParams, activeFilters);
+        
+        console.log('Sending search request with params:', searchParams);
+        
+        const response = await domainSearchApi.searchDomains(searchParams);
+        console.log('Search response received:', response);
+        
+        if (!response || !Array.isArray(response.results)) {
+          throw new Error('Invalid search response format');
+        }
+        
+        // Adapt filtered domain info to DomainSearchResult format
+        const adaptedResults = response.results.map(adaptFilteredToDomainResult);
+        console.log('Adapted search results:', adaptedResults);
+        
+        if (adaptedResults.length === 0) {
+          console.log('No results found for search');
+        }
+        
+        onSearchComplete(adaptedResults);
+      }
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to search domains';
+      console.error('Search error:', err);
+      const errorMessage = err instanceof Error ? err.message : 
+                          typeof err === 'string' ? err : 'An unknown error occurred';
+      console.error('Error details:', { error: err });
       setError(errorMessage);
       onSearchError(errorMessage);
-      console.error('Search error:', err);
     } finally {
+      setIsWhoisSearching(false);
       setIsSearching(false);
     }
-  }, [query, selectedTlds, onSearchStart, onSearchComplete, onSearchError]);
+  }, [query, selectedTlds, activeFilters, onSearchStart, onSearchComplete, onSearchError, isWhois]);
 
-  const handleSuggestionClick = (suggestion: string) => {
-    setQuery(suggestion);
-    setSuggestions([]);
-    // Optionally trigger search immediately when a suggestion is clicked
-    // handleSearch(new Event('submit') as unknown as React.FormEvent);
-  };
+  // Toggle WHOIS mode
+  const toggleWhois = useCallback(() => {
+    setIsWhois(prev => !prev);
+  }, []);
 
-  const toggleTld = (tld: string) => {
+  // Handle TLD selection
+  const toggleTld = useCallback((tld: string) => {
     setSelectedTlds(prev => 
       prev.includes(tld) 
         ? prev.filter(t => t !== tld)
         : [...prev, tld]
     );
-  };
+  }, []);
 
-  const handleTldSelectAll = () => {
+  // Handle TLD select all
+  const handleTldSelectAll = useCallback(() => {
     setSelectedTlds(POPULAR_TLDS);
-  };
+  }, []);
 
-  const handleTldClear = () => {
+  // Handle TLD clear
+  const handleTldClear = useCallback(() => {
     setSelectedTlds([]);
-  };
+  }, []);
 
-  // Handle applying filters from the advanced panel
-  const handleApplyFilters = useCallback((filters: SearchFilters) => {
-    setActiveFilters(filters);
-    setIsAdvancedOpen(false);
-    
-    // Trigger a new search with the updated filters
-    if (query.trim()) {
-      onSearchStart(query, selectedTlds, filters);
-    }
-  }, [query, selectedTlds, onSearchStart]);
-
-  // Count active filters
-  const activeFilterCount = Object.values(activeFilters).filter(
-    (value) => 
-      (typeof value === 'boolean' && value) ||
-      (Array.isArray(value) && value.length > 0) ||
-      (value !== '' && value !== undefined && value !== null)
-  ).length;
+  // Handle advanced filters toggle
+  const toggleAdvanced = useCallback(() => {
+    setIsAdvancedOpen(prev => !prev);
+  }, []);
 
   return (
     <div className={`space-y-4 ${className}`}>
-      <form onSubmit={handleSearch} className="space-y-3">
-        <div className="flex flex-col sm:flex-row gap-2 w-full">
-          <div className="relative flex-1">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-              <input
-                type="text"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Enter a name or keyword..."
-                className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                  error ? 'border-red-500' : 'border-gray-300'
-                }`}
-                disabled={isSearching}
-                aria-label="Domain search input"
-              />
-            </div>
-          {/* Suggestions dropdown */}
-          {suggestions.length > 0 && (
-            <ul className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-              {suggestions.map((suggestion, index) => (
-                <li 
-                  key={index}
-                  className="px-4 py-2 hover:bg-blue-50 cursor-pointer text-gray-800 hover:text-blue-700 flex items-center"
-                  onClick={() => handleSuggestionClick(suggestion)}
-                >
-                  <span className="font-medium">{suggestion}</span>
-                  <span className="ml-2 text-sm text-gray-500">.com .io .ai</span>
-                </li>
-              ))}
-            </ul>
+      <div className="flex flex-col sm:flex-row gap-4">
+        <div className="flex-1 relative">
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Enter your business name or keywords..."
+            className={`w-full pl-10 pr-4 py-3 text-base border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+              error ? 'border-red-500' : 'border-gray-300'
+            }`}
+            disabled={isSearching}
+          />
+          {query && (
+            <button
+              type="button"
+              onClick={() => setQuery('')}
+              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+            >
+              <X className="h-4 w-4" />
+            </button>
           )}
         </div>
-        {/* Search button */}
+
         <div className="flex gap-2">
           <button
             type="button"
-            onClick={() => setIsAdvancedOpen(true)}
-            className={`inline-flex items-center px-4 py-3 border rounded-lg font-medium ${
-              activeFilterCount > 0
-                ? 'bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100'
-                : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
-            }`}
-            aria-label="Advanced search filters"
+            onClick={toggleWhois}
+            className="px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50 flex items-center gap-1"
           >
-            <SlidersHorizontal className="h-5 w-5 mr-2" />
-            {activeFilterCount > 0 && (
-              <span className="inline-flex items-center justify-center px-2 py-0.5 text-xs font-bold leading-none text-blue-800 bg-blue-100 rounded-full ml-1">
-                {activeFilterCount}
-              </span>
-            )}
+            <span className="hidden sm:inline">WHOIS</span>
           </button>
+
           <button
-            type="submit"
-            disabled={isSearching || !query.trim() || selectedTlds.length === 0}
-            className={`px-6 py-3 text-white font-medium rounded-lg transition-colors whitespace-nowrap ${
-              isSearching || !query.trim() || selectedTlds.length === 0
-                ? 'bg-blue-400 cursor-not-allowed' 
-                : 'bg-blue-600 hover:bg-blue-700'
-            }`}
-            aria-label={isSearching ? 'Searching...' : 'Search domains'}
+            type="button"
+            onClick={toggleAdvanced}
+            className="px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50 flex items-center gap-1"
+          >
+            <SearchIcon className="w-4 h-4" />
+            <span className="hidden sm:inline">Advanced</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleSearch}
+            disabled={isSearching || !query}
+            className={`px-6 py-2 rounded-lg ${isSearching ? 'bg-gray-300 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 text-white'}`}
           >
             {isSearching ? (
-              <span className="flex items-center justify-center">
-                <Loader2 className="animate-spin mr-2 h-4 w-4" />
-                Searching...
-              </span>
+              <>
+                <div className="w-5 h-5 border-2 border-t-transparent border-blue-500 rounded-full animate-spin" /> 
+                {isWhois ? 'Checking WHOIS...' : 'Searching...'}
+              </>
             ) : (
-              <span className="flex items-center">
-                <Search className="mr-2 h-4 w-4" />
-                Search
-              </span>
+              isWhois ? 'Check WHOIS' : 'Search'
             )}
           </button>
         </div>
       </div>
-      {/* Selected TLDs */}
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-sm text-gray-500">Extensions:</span>
-        {POPULAR_TLDS.map((tld) => (
+
+      <div className="flex justify-between items-center mb-2">
+        <h3 className="text-sm font-medium text-gray-700">Domain Extensions</h3>
+        <div className="flex gap-2">
           <button
-            key={tld}
             type="button"
-            onClick={() => toggleTld(tld)}
-            className={`px-3 py-1 text-sm rounded-full transition-colors ${
-              selectedTlds.includes(tld)
-                ? 'bg-blue-100 text-blue-800 border border-blue-200'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
+            onClick={handleTldSelectAll}
+            className="text-xs text-blue-600 hover:underline"
           >
-            .{tld}
+            Select All
           </button>
-        ))}
-        <button
-          type="button"
-          onClick={handleTldSelectAll}
-          className="text-sm text-blue-600 hover:underline"
-        >
-          Select All
-        </button>
-        <button
-          type="button"
-          onClick={handleTldClear}
-          className="text-sm text-gray-500 hover:text-gray-700"
-        >
-          Clear
-        </button>
+          <span className="text-gray-300">|</span>
+          <button
+            type="button"
+            onClick={handleTldClear}
+            className="text-xs text-gray-500 hover:text-gray-700"
+          >
+            Clear
+          </button>
+        </div>
       </div>
-      {/* Active filters */}
-      {activeFilterCount > 0 && (
-        <div className="flex flex-wrap items-center gap-2 text-sm">
-          <span className="text-gray-500">Active filters:</span>
-          {activeFilters.minPrice && (
-            <span className="px-2 py-1 bg-blue-50 text-blue-700 rounded-full text-xs">
-              Min: ${activeFilters.minPrice}
-            </span>
-          )}
-          {activeFilters.maxPrice && (
-            <span className="px-2 py-1 bg-blue-50 text-blue-700 rounded-full text-xs">
-              Max: ${activeFilters.maxPrice}
-            </span>
-          )}
-          {activeFilters.onlyAvailable && (
-            <span className="px-2 py-1 bg-blue-50 text-blue-700 rounded-full text-xs">
-              Available Only
-            </span>
-          )}
-          {activeFilters.onlyPremium && (
-            <span className="px-2 py-1 bg-blue-50 text-blue-700 rounded-full text-xs">
-              Premium Only
-            </span>
-          )}
-          <button
-            type="button"
-            onClick={() => setActiveFilters({})}
-            className="ml-2 text-sm text-red-600 hover:underline"
-          >
-            Clear all
-          </button>
+
+      <div className="flex flex-wrap gap-2">
+        {POPULAR_TLDS.map((tld) => {
+          const isSelected = selectedTlds.includes(tld);
+          return (
+            <button
+              key={tld}
+              type="button"
+              onClick={() => toggleTld(tld)}
+              className={`px-3 py-1 text-sm rounded-full transition-colors cursor-pointer ${
+                isSelected
+                  ? 'bg-blue-600 text-white border border-blue-600 font-medium'
+                  : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
+              }`}
+              aria-pressed={isSelected}
+              aria-label={`Toggle ${tld} domain extension`}
+            >
+              .{tld}
+            </button>
+          );
+        })}
+      </div>
+
+      {isAdvancedOpen && (
+        <div className="bg-white rounded-lg shadow-md p-4">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-lg font-medium">Advanced Filters</h3>
+            <button
+              type="button"
+              onClick={toggleAdvanced}
+              className="text-gray-500 hover:text-gray-700"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+          <AdvancedSearchPanel
+            isOpen={isAdvancedOpen}
+            onClose={() => {
+              toggleAdvanced();
+              // Manually update active filters when the panel is closed
+              // This is a workaround since we removed the onApplyFilters prop
+              setActiveFilters(current => ({ ...current }));
+            }}
+            initialFilters={activeFilters}
+            availableTlds={POPULAR_TLDS}
+          />
         </div>
       )}
-      {/* Error message */}
+
+      {(isSearching || isWhoisSearching) && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center">
+          <div className="bg-white p-8 rounded-lg shadow-lg">
+            <div className="flex flex-col items-center gap-4">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+              <p className="text-lg font-semibold">{isWhois ? 'Checking WHOIS...' : 'Searching Domains...'}</p>
+              <p className="text-gray-600">Please wait while we {isWhois ? 'check WHOIS data' : 'find the perfect domain for you'}</p>
+              <button 
+                type="button" 
+                onClick={() => {
+                  // Set loading states to false first to prevent race conditions
+                  if (isWhois) {
+                    setIsWhoisSearching(false);
+                  } else {
+                    setIsSearching(false);
+                  }
+                  // Notify parent component about the cancellation
+                  onSearchError('Search was cancelled');
+                  setError('Search was cancelled');
+                }} 
+                className="mt-4 px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition-colors"
+                disabled={!isSearching && !isWhoisSearching}
+              >
+                Cancel Search
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {error && (
-        <div className="p-3 text-sm text-red-700 bg-red-50 rounded-lg">
-          {error}
+        <div className="bg-red-50 border-l-4 border-red-500 p-4 mb-4">
+          <div className="flex">
+            <div className="flex-shrink-0">
+              <svg className="h-5 w-5 text-red-500" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="ml-3">
+              <p className="text-sm text-red-700">{error}</p>
+            </div>
+          </div>
         </div>
       )}
-    </form>
-    {/* Search tips */}
-    <div className="text-sm text-gray-500 mt-2">
-      <p>Tip: Try searching for a brand name, keyword, or phrase (e.g., "myawesomeapp")</p>
     </div>
-    {/* Advanced Search Panel */}
-    <div ref={panelRef}>
-      <AdvancedSearchPanel
-        isOpen={isAdvancedOpen}
-        onClose={() => setIsAdvancedOpen(false)}
-        onApplyFilters={handleApplyFilters}
-        initialFilters={activeFilters}
-        availableTlds={POPULAR_TLDS}
-      />
-    </div>
-  </div>
-);
+  );
 };
