@@ -2,11 +2,8 @@ import { useState } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { useAuthForm, loginSchema } from '../hooks/useAuthForm';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Label } from '@/components/ui/label';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Button } from '../../../components/ui/button';
+import { Input } from '../../../components/ui/input';
 import { AlertCircle, Loader2 } from 'lucide-react';
 
 export const LoginForm = () => {
@@ -25,30 +22,38 @@ export const LoginForm = () => {
     submitError,
     handleChange,
     handleSubmit,
-    setFieldValue,
+    setValues,
   } = useAuthForm({
+    // Explicitly type the initial values to match the schema
     initialValues: {
       email: '',
       password: '',
       rememberMe: false,
-    },
+    } as const,
+    // Remove the initialValues from here since we're setting it above
     validationSchema: loginSchema,
     onSubmit: async (values) => {
       try {
         await login(values.email, values.password);
         navigate(from, { replace: true });
       } catch (error) {
-        // Error is already handled by useAuthForm
         console.error('Login error:', error);
       }
     },
   });
 
+  const handleCheckboxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setValues(prev => ({
+      ...prev,
+      rememberMe: e.target.checked
+    }));
+  };
+
   const handleDemoLogin = async () => {
     try {
       await login('demo@namesearch.io', 'Demo@123');
       navigate(from, { replace: true });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Demo login error:', error);
     }
   };
@@ -63,15 +68,21 @@ export const LoginForm = () => {
       </div>
 
       {submitError && (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>{submitError}</AlertDescription>
-        </Alert>
+        <div className="rounded-md bg-red-50 p-4">
+          <div className="flex">
+            <div className="flex-shrink-0">
+              <AlertCircle className="h-5 w-5 text-red-400" aria-hidden="true" />
+            </div>
+            <div className="ml-3">
+              <p className="text-sm text-red-700">{submitError}</p>
+            </div>
+          </div>
+        </div>
       )}
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-2">
-          <Label htmlFor="email">Email</Label>
+          <label htmlFor="email">Email</label>
           <Input
             id="email"
             name="email"
@@ -90,7 +101,7 @@ export const LoginForm = () => {
 
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <Label htmlFor="password">Password</Label>
+            <label htmlFor="password">Password</label>
             <Link
               to="/forgot-password"
               className="text-sm font-medium text-primary hover:underline"
@@ -130,17 +141,18 @@ export const LoginForm = () => {
 
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
-            <Checkbox
+            <input
+              type="checkbox"
               id="rememberMe"
-              checked={values.rememberMe}
-              onCheckedChange={(checked) =>
-                setFieldValue('rememberMe', checked === true)
-              }
+              name="rememberMe"
+              checked={Boolean(values.rememberMe)}
+              onChange={handleCheckboxChange}
               disabled={isSubmitting || isLoading}
+              className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
             />
-            <Label htmlFor="rememberMe" className="text-sm">
+            <label htmlFor="rememberMe" className="block text-sm font-medium text-gray-700">
               Remember me
-            </Label>
+            </label>
           </div>
         </div>
 

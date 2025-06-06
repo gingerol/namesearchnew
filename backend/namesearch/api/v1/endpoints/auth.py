@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Body
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
-from .... import crud, models
+from .... import crud, models, schemas
 from ....core import security
 from ....core.config import settings
 from ....db.session import get_db
@@ -186,17 +186,17 @@ def forgot_password(
     return {"msg": "If the email exists, a password reset link will be sent"}
 
 
-@router.post("/password-recovery/{email}", response_model=schemas.Msg)
+@router.post("/password-recovery/{email}", response_model=dict[str, str])
 async def recover_password(
     email: str, 
     db: Session = Depends(get_db)
-) -> Any:
+) -> dict[str, str]:
     """
     Initiate password recovery process.
     """
     user = crud.user.get_by_email(db, email=email)
     
-    # Always return 202 to prevent email enumeration
+    # Always return 200 with the same message to prevent email enumeration
     if not user or not user.is_active:
         return {"msg": "If your email is registered, you will receive a password reset link."}
     

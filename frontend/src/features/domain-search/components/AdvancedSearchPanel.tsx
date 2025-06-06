@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAdvancedSearchStore } from '../advancedSearchStore';
 import { X, Save } from 'lucide-react';
-import type { SearchFilters, AdvancedDomainSearchRequestFE, FilteredDomainInfoFE } from '../types';
-// Removed PaginatedFilteredDomainsResponseFE and domainSearchApi as they are no longer used directly
+import type { SearchFilters, AdvancedDomainSearchRequestFE } from '../types';
 
 // Re-export the SearchFilters interface from types
 export type { SearchFilters };
@@ -10,7 +9,6 @@ export type { SearchFilters };
 interface AdvancedSearchPanelProps {
   isOpen: boolean;
   onClose: () => void;
-  // onApplyFilters: (filters: SearchFilters) => void; // Removed as store handles filter application
   initialFilters?: Partial<SearchFilters>;
   availableTlds?: string[];
 }
@@ -71,229 +69,177 @@ export const AdvancedSearchPanel: React.FC<AdvancedSearchPanelProps> = ({
   isOpen,
   onClose,
   initialFilters = {},
-  availableTlds = [], // Add default value for availableTlds
+  availableTlds = [],
 }) => {
-
-
-  // Local state for form inputs - will be replaced by store in Phase 2
-  const [filters, setFilters] = useState<SearchFilters>({
+  // Get store state and actions
+  const { 
+    currentFilters, 
+    setCurrentFilters, 
+    fetchAdvancedSearchResults,
+    resetSearchState
+  } = useAdvancedSearchStore();
+  
+  // Initialize filters from store and props
+  const [filters, setFilters] = useState<SearchFilters>(() => ({
     ...defaultFilters,
     ...initialFilters,
-  });
+    ...currentFilters,
+  }));
   
+  // Update local filters when store filters change or panel opens
+  useEffect(() => {
+    if (isOpen) {
+      setFilters(prev => ({
+        ...defaultFilters,
+        ...initialFilters,
+        ...currentFilters,
+        // Preserve any local changes that haven't been saved to the store yet
+        ...prev
+      }));
+    }
+  }, [isOpen, currentFilters, initialFilters]);
+  
+  // Handle form reset
+  const handleReset = useCallback(() => {
+    const resetFilters = {
+      ...defaultFilters,
+      ...initialFilters,
+    };
+    setFilters(resetFilters);
+    setCurrentFilters(resetFilters);
+    resetSearchState();
+  }, [initialFilters, resetSearchState, setCurrentFilters]);
+
   // Use the availableTlds prop with default values
   const tlds = availableTlds.length > 0 ? availableTlds : ['com', 'net', 'org', 'io', 'ai'];
   
-  const handleTldToggle = (tld: string) => {
-    setFilters(prev => {
-      const newTlds = prev.tlds.includes(tld)
-        ? prev.tlds.filter(t => t !== tld)
-        : [...prev.tlds, tld];
-      return {
-        ...prev,
-        tlds: newTlds
-      };
-    });
-  };
-
-  // Connect to Zustand store
-  const {
-    isLoading,
-    error,
-    fetchAdvancedSearchResults,
-    // Results and pagination will be consumed from store by a display component later
-    // results: storeResults,
-    // currentPage: storeCurrentPage,
-    // pageSize: storePageSize,
-    // totalItems: storeTotalItems,
-    // totalPages: storeTotalPages,
-  } = useAdvancedSearchStore();
-
-  // Local state for search results and pagination - will be removed once a display component consumes from store
-  const [searchResults, setSearchResults] = useState<FilteredDomainInfoFE[]>([]);
-  const [paginationInfo, setPaginationInfo] = useState<{
-    page: number;
-    pageSize: number;
-    totalItems: number;
-    totalPages: number;
-  } | null>(null);
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Update local filters
+  const updateFilters = useCallback((updates: Partial<SearchFilters>) => {
+    setFilters(prev => ({
+      ...prev,
+      ...updates,
+      // Ensure characterTypes is properly merged
+      ...(updates.characterTypes ? {
+        characterTypes: {
+          ...prev.characterTypes,
+          ...updates.characterTypes
+        }
+      } : {})
+    }));
+  }, []);
+  
+  // Update store when filters change
+  const updateStoreFilters = useCallback((newFilters: SearchFilters) => {
+    setCurrentFilters(newFilters);
+  }, [setCurrentFilters]);
+  
+  // Debounce store updates to prevent excessive renders
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      updateStoreFilters(filters);
+    }, 300);
+    
+    return () => clearTimeout(timer);
+  }, [filters, updateStoreFilters]);
+  
+  // Handle TLD toggle
+  const handleTldToggle = useCallback((tld: string) => {
+    const newTlds = filters.tlds.includes(tld)
+      ? filters.tlds.filter(t => t !== tld)
+      : [...filters.tlds, tld];
+    updateFilters({ tlds: newTlds });
+  }, [filters.tlds, updateFilters]);
+  
+  // Handle input changes
+  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value, type, checked } = e.target;
-    
-    setFilters((prev: SearchFilters) => ({
-      ...prev,
-      [name]: type === 'checkbox' ? checked : value === '' ? '' : Number(value),
-    }));
-  };
-
-  const handleTextInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    updateFilters({ [name]: type === 'checkbox' ? checked : value });
+  }, [updateFilters]);
+  
+  // Handle text input changes
+  const handleTextInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setFilters((prev: SearchFilters) => ({
-      ...prev,
-      [name]: value,
-    }));
-  };
-
-  const handleSelectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    updateFilters({ [name]: value });
+  }, [updateFilters]);
+  
+  // Handle select changes
+  const handleSelectChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
     const { name, value } = e.target;
-    setFilters((prev: SearchFilters) => ({
-      ...prev,
-      [name]: value,
-    }));
-  };
-
-  const handleCharacterTypeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    updateFilters({ [name]: value });
+  }, [updateFilters]);
+  
+  // Handle character type changes
+  const handleCharacterTypeChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, checked } = e.target;
-    
-    setFilters((prev: SearchFilters) => ({
-      ...prev,
+    updateFilters({
       characterTypes: {
-        ...prev.characterTypes,
+        ...filters.characterTypes,
         [name]: checked,
       },
-    }));
-  };
-
+    });
+  }, [filters.characterTypes, updateFilters]);
+  
+  // Handle form submission
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
-    // setLoading(true); // Store action will set loading
-    // setError(null); // Store action will clear error
-    setSearchResults([]); // Clear local results, will eventually be driven by store
-    setPaginationInfo(null); // Clear local pagination, will eventually be driven by store
-
-    // Helper to convert string to number or undefined
-    const toNumberOrUndefined = (val: string | number | undefined): number | undefined => {
-      if (val === undefined || val === '') return undefined;
-      const num = Number(val);
-      return isNaN(num) ? undefined : num;
-    };
-
-    const apiRequestParams: AdvancedDomainSearchRequestFE = {
-      // DEV_NOTE: `filters.contains` is currently used as the primary keyword source for the API.
-      // Consider adding a dedicated 'keywords' field to SearchFilters if 'contains' has a different meaning.
-      keywords: filters.contains && filters.contains.trim() ? [filters.contains.trim()] : undefined,
-      tlds: filters.tlds && filters.tlds.length > 0 ? filters.tlds : undefined,
-      min_price: toNumberOrUndefined(filters.minPrice),
-      max_price: toNumberOrUndefined(filters.maxPrice),
-      min_length: toNumberOrUndefined(filters.minLength),
-      max_length: toNumberOrUndefined(filters.maxLength),
-      page: 1, // Default to page 1 for new search
-      page_size: 20, // Default page size
-
-      // Availability
-      only_available: filters.onlyAvailable,
-      only_premium: filters.onlyPremium,
-
-      // Domain characteristics
-      starts_with: filters.startsWith || undefined,
-      ends_with: filters.endsWith || undefined,
-      exclude_pattern: filters.exclude || undefined,
-
-      // Character types
-      allow_numbers: filters.characterTypes.numbers,
-      allow_hyphens: filters.characterTypes.hyphens,
-      allow_special_chars: filters.characterTypes.special,
-      // Not sending allow_letters, assuming it's default true unless restricted by other flags
-
-      // Domain quality
-      min_quality_score: toNumberOrUndefined(filters.minQualityScore),
-      min_seo_score: toNumberOrUndefined(filters.minSeoScore),
-
-      // Registration date - ensure proper date format if provided
-      registered_after: filters.registeredAfter ? new Date(filters.registeredAfter).toISOString().split('T')[0] : undefined,
-      registered_before: filters.registeredBefore ? new Date(filters.registeredBefore).toISOString().split('T')[0] : undefined,
-
-      // Domain age
-      min_age_years: toNumberOrUndefined(filters.minAgeYears),
-      max_age_years: toNumberOrUndefined(filters.maxAgeYears),
-
-      // Popularity
-      min_search_volume: toNumberOrUndefined(filters.minSearchVolume),
-      min_cpc: toNumberOrUndefined(filters.minCpc),
-
-      // Language - only include if not empty
-      language_codes: filters.language && filters.language.trim() ? [filters.language.trim()] : undefined,
-
-      // Sorting - ensure we have defaults
-      sort_by: filters.sortBy || 'relevance',
-      sort_order: filters.sortOrder || 'desc',
-    };
-
     try {
-      console.log('Submitting search with params:', apiRequestParams);
+      // Prepare search filters with proper typing
+      const searchFilters: AdvancedDomainSearchRequestFE = {
+        // Include a default query parameter to satisfy backend requirements
+        query: 'search', // Default query when none provided
+        // Convert filters to match AdvancedDomainSearchRequestFE type
+        ...Object.fromEntries(
+          Object.entries(filters).map(([key, value]) => {
+            // Map SearchFilters properties to AdvancedDomainSearchRequestFE properties
+            const mappedKey = key === 'startsWith' ? 'starts_with' :
+                             key === 'endsWith' ? 'ends_with' :
+                             key === 'minPrice' ? 'min_price' :
+                             key === 'maxPrice' ? 'max_price' :
+                             key === 'minLength' ? 'min_length' :
+                             key === 'maxLength' ? 'max_length' :
+                             key === 'onlyAvailable' ? 'only_available' :
+                             key === 'onlyPremium' ? 'only_premium' :
+                             key === 'minQualityScore' ? 'min_quality_score' :
+                             key === 'minSeoScore' ? 'min_seo_score' :
+                             key === 'registeredAfter' ? 'registered_after' :
+                             key === 'registeredBefore' ? 'registered_before' :
+                             key === 'minAgeYears' ? 'min_age_years' :
+                             key === 'maxAgeYears' ? 'max_age_years' :
+                             key === 'minSearchVolume' ? 'min_search_volume' :
+                             key === 'minCpc' ? 'min_cpc' :
+                             key === 'sortBy' ? 'sort_by' :
+                             key === 'sortOrder' ? 'sort_order' :
+                             key;
+            
+            // Skip undefined, null, or empty string values
+            if (value === undefined || value === null || value === '') {
+              return [mappedKey, undefined];
+            }
+            
+            // Handle nested characterTypes object
+            if (key === 'characterTypes' && typeof value === 'object') {
+              return [
+                'allow_numbers',
+                (value as any).numbers
+              ];
+            }
+            
+            return [mappedKey, value];
+          })
+        )
+      };
       
-      // Clean up the request parameters
-      const cleanParams = Object.fromEntries(
-        Object.entries(apiRequestParams).filter(([_, v]) => v !== undefined && v !== '')
-      ) as AdvancedDomainSearchRequestFE;
+      // Update store with current filters
+      setCurrentFilters(filters);
       
-      // Execute the search
-      const response = await fetchAdvancedSearchResults(cleanParams);
-      console.log('Search response:', response);
-      
-      if (response?.results) {
-        // Update local state with results
-        setSearchResults(response.results);
-        setPaginationInfo({
-          page: response.page || 1,
-          pageSize: response.page_size || 20,
-          totalItems: response.total_items || 0,
-          totalPages: response.total_pages || 1
-        });
-      } else {
-        console.warn('No results returned from search');
-        setSearchResults([]);
-        setPaginationInfo({
-          page: 1,
-          pageSize: 20,
-          totalItems: 0,
-          totalPages: 1
-        });
-      }
-    } catch (err: any) {
-      console.error('Search error:', err);
-      // Set error state
-      setSearchResults([]);
-      setPaginationInfo(null);
-      // You might want to display an error message to the user here
+      // Perform the search with properly typed filters
+      await fetchAdvancedSearchResults(searchFilters);
+      onClose();
+    } catch (err) {
+      console.error('Error performing search:', err);
+      // Don't close on error to allow user to see and fix issues
     }
-    // isLoading is handled by the store
-  }, [fetchAdvancedSearchResults, filters /* filters still a dependency for apiRequestParams */]); // UX Decision: Keep panel open to show results, or close. For now, keeping it open.
-
-  const handleReset = () => {
-    setFilters({
-      ...defaultFilters,
-      ...initialFilters,
-    });
-  };
-
-  // Effect to handle Escape key press
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        onClose();
-      }
-    };
-
-    if (isOpen) {
-      document.addEventListener('keydown', handleKeyDown);
-    }
-
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [isOpen, onClose]);
-
-  // Handler for clicking on the overlay (backdrop)
-  const handleOverlayClick = () => {
-    onClose();
-  };
-
-  // Handler for clicks within the panel content to prevent closing
-  const handlePanelContentClick = (event: React.MouseEvent<HTMLDivElement>) => {
-    event.stopPropagation();
-  };
+  }, [filters, onClose, setCurrentFilters, fetchAdvancedSearchResults]);
 
   if (!isOpen) return null;
 
@@ -306,7 +252,7 @@ export const AdvancedSearchPanel: React.FC<AdvancedSearchPanelProps> = ({
         backgroundColor: isOpen ? 'rgba(0, 0, 0, 0.5)' : 'transparent',
         transition: 'background-color 300ms ease-in-out'
       }}
-      onClick={handleOverlayClick}
+      onClick={onClose}
     >
       <div className="absolute inset-0 overflow-hidden">
         <div className="pointer-events-none fixed inset-y-0 right-0 flex max-w-full">
@@ -315,7 +261,7 @@ export const AdvancedSearchPanel: React.FC<AdvancedSearchPanelProps> = ({
             style={{
               transform: isOpen ? 'translateX(0)' : 'translateX(100%)'
             }}
-            onClick={handlePanelContentClick}
+            onClick={(e) => e.stopPropagation()}
           >
             <div className="flex h-full flex-col overflow-y-auto bg-white py-6 shadow-xl" style={{ maxHeight: '100vh' }}>
               <div className="flex-1 overflow-y-auto py-6 px-4 sm:px-6">
@@ -329,10 +275,6 @@ export const AdvancedSearchPanel: React.FC<AdvancedSearchPanelProps> = ({
                     <X className="h-6 w-6" />
                   </button>
                 </div>
-
-                {/* API Status Messages */}
-                {isLoading && <div className="mt-4 p-3 bg-blue-50 text-blue-700 rounded-md">Loading search results...</div>}
-                {error && <div className="mt-4 p-3 bg-red-50 text-red-700 rounded-md">Error: {error}</div>}
 
                 {/* Search Form */}
                 <form onSubmit={handleSubmit} className="mt-6 space-y-6">
@@ -822,100 +764,6 @@ export const AdvancedSearchPanel: React.FC<AdvancedSearchPanelProps> = ({
                     </div>
                   </div>
                 </form>
-
-                {/* Search Results */}
-                {searchResults.length > 0 && (
-                  <div className="mt-8">
-                    <h3 className="text-lg font-medium text-gray-900 mb-4">Search Results ({paginationInfo?.totalItems})</h3>
-                    <div className="bg-white shadow overflow-hidden sm:rounded-md">
-                      <ul role="list" className="divide-y divide-gray-200">
-                        {searchResults.map((result, index) => (
-                          <li key={`${result.domain_name_full}-${index}`}>
-                            <div className="px-4 py-4 sm:px-6">
-                              <div className="flex items-center justify-between">
-                                <p className="text-sm font-medium text-blue-600 truncate">
-                                  {result.domain_name_full}
-                                </p>
-                                <div className="ml-2 flex-shrink-0 flex">
-                                  <p className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-                                    {result.is_available ? 'Available' : 'Taken'}
-                                  </p>
-                                </div>
-                              </div>
-                              <div className="mt-2 sm:flex sm:justify-between">
-                                <div className="sm:flex">
-                                  <p className="flex items-center text-sm text-gray-500">
-                                    <span className="mr-2">Length: {result.name_part_length}</span>
-                                    <span className="mr-2">•</span>
-                                    <span>Quality: {result.quality_score}/10</span>
-                                  </p>
-                                </div>
-                                <div className="mt-2 flex items-center text-sm text-gray-500 sm:mt-0">
-                                  {result.price && (
-                                    <p className="text-sm font-medium text-gray-900">
-                                      ${result.price.toFixed(2)}
-                                      <span className="text-gray-500 font-normal">/year</span>
-                                    </p>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-
-                    {/* Pagination */}
-                    {paginationInfo && paginationInfo.totalPages > 1 && (
-                      <nav className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6" aria-label="Pagination">
-                        <div className="hidden sm:block">
-                          <p className="text-sm text-gray-700">
-                            Showing page <span className="font-medium">{paginationInfo.page}</span> of{' '}
-                            <span className="font-medium">{paginationInfo.totalPages}</span>
-                          </p>
-                        </div>
-                        <div className="flex-1 flex justify-between sm:justify-end space-x-3">
-                          <button
-                            type="button"
-                            disabled={paginationInfo.page <= 1}
-                            onClick={() => {
-                              const prevPage = paginationInfo.page - 1;
-                              setFilters(prev => ({
-                                ...prev,
-                                page: prevPage,
-                              }));
-                            }}
-                            className={`relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md ${
-                              paginationInfo.page <= 1
-                                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                                : 'bg-white text-gray-700 hover:bg-gray-50'
-                            }`}
-                          >
-                            Previous
-                          </button>
-                          <button
-                            type="button"
-                            disabled={paginationInfo.page >= paginationInfo.totalPages}
-                            onClick={() => {
-                              const nextPage = paginationInfo.page + 1;
-                              setFilters(prev => ({
-                                ...prev,
-                                page: nextPage,
-                              }));
-                            }}
-                            className={`relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md ${
-                              paginationInfo.page >= paginationInfo.totalPages
-                                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                                : 'bg-white text-gray-700 hover:bg-gray-50'
-                            }`}
-                          >
-                            Next
-                          </button>
-                        </div>
-                      </nav>
-                    )}
-                  </div>
-                )}
               </div>
             </div>
           </div>

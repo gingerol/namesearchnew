@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from .... import crud, models
-from ....core.security import get_current_active_user
+from ....core.security import get_current_active_user, get_current_user_optional
 from ....db.session import get_db
 from ....schemas.domain import (
     DomainSearchQuery, DomainBulkSearchResponse, DomainPublic,
@@ -114,7 +114,7 @@ async def advanced_domain_search(
     *, 
     db: Session = Depends(get_db),
     search_request: AdvancedDomainSearchRequest,
-    current_user: models.User = Depends(get_current_active_user) # Add if auth is needed
+    current_user: models.User = Depends(get_current_user_optional) # Make authentication optional
 ) -> Any:
     """
     Perform an advanced search for domains with various filters like keywords, TLDs,

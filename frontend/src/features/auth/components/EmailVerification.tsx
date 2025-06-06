@@ -154,32 +154,33 @@ export const EmailVerification = () => {
         </Alert>
       )}
 
-      <div className="space-y-4
-      <Button
-        onClick={handleResendEmail}
-        disabled={isResending || !email}
-        className="w-full"
-      >
-        {isResending ? (
-          <>
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            Sending...
-          </>
-        ) : (
-          <>
-            <RotateCw className="mr-2 h-4 w-4" />
-            Resend verification email
-          </>
-        )}
-      </Button>
+      <div className="space-y-4">
+        <Button
+          onClick={handleResendEmail}
+          disabled={isResending || !email}
+          className="w-full"
+        >
+          {isResending ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Sending...
+            </>
+          ) : (
+            <>
+              <RotateCw className="mr-2 h-4 w-4" />
+              Resend verification email
+            </>
+          )}
+        </Button>
 
-      <div className="text-center text-sm">
-        <p className="text-muted-foreground">
-          Already verified your email?{' '}
-          <a href="/login" className="font-medium text-primary hover:underline">
-            Sign in
-          </a>
-        </p>
+        <div className="text-center text-sm">
+          <p className="text-muted-foreground">
+            Already verified your email?{' '}
+            <a href="/login" className="font-medium text-primary hover:underline">
+              Sign in
+            </a>
+          </p>
+        </div>
       </div>
     </div>
   );

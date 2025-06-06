@@ -70,6 +70,14 @@ This document outlines the implementation plan for Phase 1 of Namesearch.io, foc
   - [ ] LegalPreScreening
   - [ ] ProjectWorkspace
   - [ ] NameWatchlist
+  - [ ] Advanced Search Panel UI (AdvancedSearchPanel.tsx)
+    - Status: In Progress (Core JSX syntax error resolved)
+    - Current Sub-Task: Incrementally restoring JSX to isolate any further issues.
+    - Details: 
+        - The component was simplified to `return (<div>Test</div>);` to fix a persistent syntax error (extraneous `);`). This was successful.
+        - **Next:** Restore the outer panel shell (overlay, header, API/results placeholders). The main `<form>` will remain **intentionally and temporarily commented out** during this step.
+        - *Expected:* Many 'unused variable' warnings will persist until the form and its handlers are fully restored. This is a known, temporary state.
+        - *Goal:* Achieve a stable panel structure, then incrementally uncomment/debug the form sections to achieve full functionality and eliminate all lint errors.
 - [ ] Responsive design (mobile-first, Tailwind breakpoints, adaptive layouts)
 - [ ] Performance optimizations (code splitting, lazy load, virtual lists, asset optimization)
 - [ ] Integrate monitoring/analytics (Sentry, Posthog, Lighthouse)
@@ -187,7 +195,7 @@ gantt
 - API development
 
 ## ❓ Executor's Feedback or Assistance Requests
-- Current state: Frontend admin dashboard shell and protected route are implemented. Dev server is running and accessible at /admin, with access restricted to admin users. Backend admin endpoints for dashboard analytics, user/project management, logs, and API key management are scaffolded and registered.
+- Current focus: Incrementally restoring JSX. Successfully fixed core syntax error by simplifying return to `<div>Test</div>` and removing extraneous `);`. Next: restore panel shell (overlay, header, API/result placeholders) while keeping form commented.
 - Immediate next steps: Connect frontend admin dashboard to backend admin APIs and implement real data fetching for admin widgets.
 
 ## 📝 Lessons Learned

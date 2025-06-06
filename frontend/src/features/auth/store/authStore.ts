@@ -19,6 +19,7 @@ type AuthState = {
   refreshToken: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  isInitialized: boolean;
   error: string | null;
   login: (email: string, password: string) => Promise<void>;
   register: (userData: { name: string; email: string; password: string }) => Promise<void>;
@@ -28,6 +29,7 @@ type AuthState = {
   verifyEmail: (token: string) => Promise<void>;
   resendVerificationEmail: (email: string) => Promise<void>;
   clearError: () => void;
+  initializeAuth: () => Promise<void>;
 };
 
 export const useAuthStore = create<AuthState>()(
@@ -37,8 +39,54 @@ export const useAuthStore = create<AuthState>()(
       accessToken: null,
       refreshToken: null,
       isAuthenticated: false,
-      isLoading: false,
+      isLoading: true,
+      isInitialized: false,
       error: null,
+      
+      initializeAuth: async () => {
+        try {
+          const { accessToken, refreshToken } = get();
+          
+          // If we have tokens, verify them
+          if (accessToken && refreshToken) {
+            try {
+              // Try to refresh the token to verify it
+              await get().refreshAccessToken();
+            } catch (error) {
+              console.warn('Token refresh failed, clearing auth state');
+              // If refresh fails, clear the auth state but don't throw
+              set({
+                user: null,
+                accessToken: null,
+                refreshToken: null,
+                isAuthenticated: false,
+                isLoading: false,
+                isInitialized: true,
+                error: null,
+              });
+              return;
+            }
+          }
+          
+          set({ 
+            isLoading: false, 
+            isInitialized: true,
+            // Only set isAuthenticated to true if we have a valid token
+            isAuthenticated: !!accessToken
+          });
+        } catch (error) {
+          console.error('Error initializing auth:', error);
+          set({
+            user: null,
+            accessToken: null,
+            refreshToken: null,
+            isAuthenticated: false,
+            isLoading: false,
+            isInitialized: true,
+            error: 'Failed to initialize authentication',
+          });
+        }
+      },
 
       login: async (email: string, password: string) => {
         set({ isLoading: true, error: null });
@@ -167,42 +215,54 @@ export const useAuthStore = create<AuthState>()(
   )
 );
 
-// Initialize auth state from storage on app load
-if (typeof window !== 'undefined') {
-  const { setState } = useAuthStore;
-  const storedState = JSON.parse(localStorage.getItem('auth-storage') || '{}');
+// Function to initialize auth service and state
+const initializeAuthService = () => {
+  if (typeof window === 'undefined') return;
   
-  if (storedState.state?.accessToken) {
-    try {
-      const { exp } = jwtDecode<{ exp: number }>(storedState.state.accessToken);
-      
-      // Clear expired token
-      if (Date.now() >= exp * 1000) {
-        setState({
-          user: null,
-          accessToken: null,
-          refreshToken: null,
-          isAuthenticated: false,
-        });
-      } else {
-        // Initialize axios interceptors with the current token
-        const getAccessToken = () => useAuthStore.getState().accessToken;
-        const onUnauthenticated = () => useAuthStore.getState().logout();
-        
-        // Import and initialize auth service
-        import('../api/authApi').then(({ initAuthService }) => {
-          initAuthService(getAccessToken, onUnauthenticated);
-        });
+  // Initialize auth service
+  const getAccessToken = () => useAuthStore.getState().accessToken;
+  const onUnauthenticated = () => useAuthStore.getState().logout();
+  
+  // Import and initialize auth service
+  import('../api/authApi').then(({ initAuthService }) => {
+    initAuthService(getAccessToken, onUnauthenticated);
+    
+    // Initialize auth state after auth service is ready
+    const { initializeAuth } = useAuthStore.getState();
+    initializeAuth().catch(console.error);
+  });
+  
+  // Set up storage event listener to sync auth state across tabs
+  const handleStorageChange = (e: StorageEvent) => {
+    if (e.key === 'auth-storage' && e.newValue) {
+      try {
+        const storedState = JSON.parse(e.newValue);
+        if (storedState.state) {
+          useAuthStore.setState(storedState.state);
+        }
+      } catch (error) {
+        console.error('Error syncing auth state:', error);
       }
-    } catch (error) {
-      console.error('Error initializing auth state:', error);
-      // Clear invalid token
-      setState({
-        user: null,
-        accessToken: null,
-        refreshToken: null,
-        isAuthenticated: false,
-      });
     }
+  };
+  
+  // Add storage event listener
+  window.addEventListener('storage', handleStorageChange);
+  
+  // Return cleanup function
+  return () => {
+    window.removeEventListener('storage', handleStorageChange);
+  };
+};
+
+// Initialize auth service when the store is created
+if (typeof window !== 'undefined') {
+  const cleanup = initializeAuthService();
+  
+  // Register cleanup for hot module replacement
+  if (import.meta.hot) {
+    import.meta.hot.dispose(() => {
+      cleanup?.();
+    });
   }
 }

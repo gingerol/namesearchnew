@@ -144,7 +144,7 @@ export const nameSchema = z
 export const loginSchema = z.object({
   email: emailSchema,
   password: z.string().min(1, 'Password is required'),
-  rememberMe: z.boolean().optional(),
+  rememberMe: z.boolean().default(false),
 });
 
 export const registerSchema = z
@@ -166,11 +166,15 @@ export const resetPasswordSchema = z.object({
   email: emailSchema,
 });
 
-export const newPasswordSchema = z
-  .object({
-    password: passwordSchema,
-    confirmPassword: z.string(),
-  })
+// Base password reset schema with token and email
+const basePasswordResetSchema = z.object({
+  password: passwordSchema,
+  confirmPassword: z.string(),
+  token: z.string().min(1, 'Token is required'),
+  email: emailSchema,
+});
+
+export const newPasswordSchema = basePasswordResetSchema
   .refine((data) => data.password === data.confirmPassword, {
     message: "Passwords don't match",
     path: ['confirmPassword'],

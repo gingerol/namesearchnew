@@ -162,4 +162,5 @@ const AdminDashboard: React.FC = () => {
   );
 };
 
-export { AdminDashboard };
+// Export as default for React.lazy and other dynamic imports
+export default AdminDashboard;

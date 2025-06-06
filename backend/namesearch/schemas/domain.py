@@ -97,13 +97,19 @@ DomainPublic = DomainResponse
 class DomainSearchQuery(BaseModel):
     """Schema for domain search query."""
     query: str = Field(..., description="Domain name or keyword to search")
-    tlds: Optional[List[str]] = Field(
-        default=None,
-        description="List of TLDs to check (default: ['.com', '.io', etc.])"
+    tlds: List[str] = Field(
+        default_factory=lambda: ['com', 'io', 'ai', 'co', 'app', 'dev', 'tech', 'net', 'org'],
+        description="List of TLDs to check (e.g., ['com', 'io'])"
+    )
+    limit: int = Field(
+        default=20,
+        ge=1,
+        le=100,
+        description="Maximum number of results to return (1-100)"
     )
     check_availability: bool = Field(
         default=True,
-        description="Whether to check domain availability"
+        description="Whether to check domain availability (may be slower)"
     )
     include_whois: bool = Field(
         default=False,
@@ -141,10 +147,19 @@ class SortOrderEnum(str, Enum):
     DESC = "desc"
 
 
+class KeywordMatchType(str, Enum):
+    ANY = "any"  # Matches if any of the keywords are present
+    ALL = "all"  # Matches if all of the keywords are present
+    EXACT = "exact" # Matches if the domain name is an exact match to one of the keywords
+
+
 class AdvancedDomainSearchRequest(BaseModel):
     """Schema for advanced domain search requests with multiple filters."""
-    keywords: Optional[str] = Field(None, description="General search terms for domain names or keywords related to the domain's content/niche")
+    keywords: Optional[List[str]] = Field(None, description="List of search terms for domain names or keywords related to the domain's content/niche")
+    match_type: Optional[KeywordMatchType] = Field(KeywordMatchType.ANY, description="How to match keywords: ANY, ALL, or EXACT. Default is ANY.")
+    exclude_keywords: Optional[List[str]] = Field(None, description="List of keywords to exclude from domain names")
     tlds: Optional[List[str]] = Field(None, description="List of TLDs to filter by (e.g., ['com', 'net'], without the dot)")
+    tld_types: Optional[List[TLDType]] = Field(None, description="Filter by specific TLD types (e.g., gTLD, ccTLD)")
     min_price: Optional[float] = Field(None, ge=0, description="Minimum price for the domain")
     max_price: Optional[float] = Field(None, ge=0, description="Maximum price for the domain")
     min_length: Optional[int] = Field(None, ge=1, description="Minimum length of the domain name part (excluding TLD)")
@@ -165,8 +180,10 @@ class AdvancedDomainSearchRequest(BaseModel):
     allow_special_chars: Optional[bool] = Field(None, description="Allow domains containing special characters (if supported)")
 
     # Domain quality
-    min_quality_score: Optional[float] = Field(None, ge=0, le=100, description="Minimum quality score (e.g., SEO score, custom metric)") # Assuming score is 0-100
-    min_seo_score: Optional[float] = Field(None, ge=0, le=100, description="Minimum SEO score") # Assuming score is 0-100
+    min_quality_score: Optional[float] = Field(None, ge=0, le=100, description="Minimum quality score (e.g., SEO score, custom metric)")
+    max_quality_score: Optional[float] = Field(None, ge=0, le=100, description="Maximum quality score")
+    min_seo_score: Optional[float] = Field(None, ge=0, le=100, description="Minimum SEO score")
+    max_seo_score: Optional[float] = Field(None, ge=0, le=100, description="Maximum SEO score")
 
     # Registration date
     registered_after: Optional[datetime] = Field(None, description="Filter for domains registered after this date (ISO format)")
@@ -178,10 +195,12 @@ class AdvancedDomainSearchRequest(BaseModel):
 
     # Popularity
     min_search_volume: Optional[int] = Field(None, ge=0, description="Minimum monthly search volume")
+    max_search_volume: Optional[int] = Field(None, ge=0, description="Maximum monthly search volume")
     min_cpc: Optional[float] = Field(None, ge=0, description="Minimum Cost Per Click (CPC) value")
+    max_cpc: Optional[float] = Field(None, ge=0, description="Maximum Cost Per Click (CPC) value")
 
     # Language
-    language_code: Optional[str] = Field(None, description="Filter by domain language (e.g., 'en', 'es')")
+    language_codes: Optional[List[str]] = Field(None, description="Filter by domain languages (e.g., ['en', 'es'])")
 
     # Sorting
     sort_by: Optional[str] = Field(None, description="Field to sort by (e.g., 'price', 'length', 'relevance', 'popularity')")
@@ -200,20 +219,38 @@ class AdvancedDomainSearchRequest(BaseModel):
     class Config:
         schema_extra = {
             "example": {
-                "keywords": "tech solution",
-                "tlds": ["com", "ai"],
-                "min_price": 10.0,
-                "max_price": 1000.0,
+                "keywords": ["innovate", "ai"],
+                "match_type": "all",
+                "exclude_keywords": ["data", "cloud"],
+                "tlds": ["ai", "com"],
+                "tld_types": ["ngtdld", "gtld"],
+                "min_price": 100.00,
+                "max_price": 1000.00,
                 "min_length": 5,
-                "max_length": 15,
+                "max_length": 10,
                 "only_available": True,
+                "only_premium": False,
                 "starts_with": "inno",
-                "allow_numbers": False,
-                "min_seo_score": 75,
+                "ends_with": "ai",
+                "allow_numbers": True,
+                "allow_hyphens": False,
+                "min_quality_score": 70,
+                "max_quality_score": 95,
+                "min_seo_score": 60,
+                "max_seo_score": 90,
+                "registered_after": "2022-01-01T00:00:00Z",
+                "registered_before": "2023-12-31T23:59:59Z",
+                "min_age_years": 1,
+                "max_age_years": 3,
+                "min_search_volume": 1000,
+                "max_search_volume": 50000,
+                "min_cpc": 0.5,
+                "max_cpc": 5.0,
+                "language_codes": ["en"],
                 "sort_by": "price",
                 "sort_order": "asc",
                 "page": 1,
-                "page_size": 20
+                "page_size": 50
             }
         }
 

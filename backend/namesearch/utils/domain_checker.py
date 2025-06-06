@@ -1,6 +1,7 @@
 """
 Domain availability checker using python-whois with caching.
 """
+import re
 import whois
 import socket
 import logging
@@ -69,43 +70,49 @@ def is_domain_available(domain: str) -> Tuple[bool, Optional[Dict[str, Any]]]:
             )
             
             # Convert WHOIS data to dict if it's not already
-            whois_data = dict(w) if not isinstance(w, dict) else w
+            whois_data = dict(w) if w and not isinstance(w, dict) else (w or {})
             
-            # Check for common availability indicators in the response
-            whois_str = str(whois_data).lower()
-            availability_indicators = [
-                "no match", "no data found", "not found", 
-                "no entries found", "no object found",
-                "no such domain", "domain not found"
-            ]
-            
-            if any(indicator in whois_str for indicator in availability_indicators):
-                result = (True, whois_data)
+            # Check if we got any meaningful data
+            if not whois_data:
+                logger.warning(f"No WHOIS data received for {domain}, assuming available")
+                result = (True, None)
             else:
-                # Check if we have a domain name in the response
-                if whois_data.get('domain_name'):
-                    # Check if domain is expired
-                    exp_date = whois_data.get('expiration_date')
-                    if exp_date:
-                        if isinstance(exp_date, list):
-                            exp_date = exp_date[0] if exp_date else None
-                        if exp_date and isinstance(exp_date, datetime) and exp_date < datetime.now():
-                            result = (True, whois_data)
-                            
-                    # If we have name servers, domain is likely registered
-                    if whois_data.get('name_servers'):
-                        result = (False, whois_data)
-                    else:
-                        # If we have a creation date but no name servers, still consider it registered
-                        if whois_data.get('creation_date'):
+                # Check for common availability indicators in the response
+                whois_str = str(whois_data).lower()
+                availability_indicators = [
+                    "no match", "no data found", "not found", 
+                    "no entries found", "no object found",
+                    "no such domain", "domain not found"
+                ]
+                
+                if any(indicator in whois_str for indicator in availability_indicators):
+                    result = (True, whois_data)
+                else:
+                    # Check if we have a domain name in the response
+                    if whois_data.get('domain_name'):
+                        # Check if domain is expired
+                        exp_date = whois_data.get('expiration_date')
+                        if exp_date:
+                            if isinstance(exp_date, list):
+                                exp_date = exp_date[0] if exp_date else None
+                            if exp_date and isinstance(exp_date, datetime) and exp_date < datetime.now():
+                                result = (True, whois_data)
+                                return result  # Early return for expired domains
+                        
+                        # If we have name servers, domain is likely registered
+                        if whois_data.get('name_servers'):
                             result = (False, whois_data)
                         else:
-                            # If we can't determine, assume available
-                            result = (True, whois_data)
-                else:
-                    # No domain name in response, assume available
-                    result = (True, whois_data)
-                    
+                            # If we have a creation date but no name servers, still consider it registered
+                            if whois_data.get('creation_date'):
+                                result = (False, whois_data)
+                            else:
+                                # If we can't determine, assume available
+                                result = (True, whois_data)
+                    else:
+                        # No domain name in response, assume available
+                        result = (True, whois_data)
+                        
         except (whois.parser.PywhoisError, socket.timeout, Exception) as e:
             logger.warning(f"WHOIS lookup failed for {domain}: {str(e)}")
             # If we can't get WHOIS info, be conservative and assume registered

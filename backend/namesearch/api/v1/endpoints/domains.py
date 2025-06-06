@@ -19,6 +19,7 @@ from ....schemas.domain import (
     DomainSearchQuery, DomainSearchResult, DomainCreate, DomainStatus
 )
 from ....schemas.search import Search
+from ....utils.domain_checker import is_domain_available
 # Temporarily commenting out AI services to avoid dependency conflicts
 # from ....services.ai import analyze_domain_name, analyze_brand_archetype
 
@@ -632,27 +633,65 @@ async def search_whois(
                 content={"detail": "Maximum of 10 domains can be checked at once"}
             )
         
-        # For now, return mock WHOIS data
+        # Perform real WHOIS lookups
         results = {}
         for domain in domain_names:
-            # Mock WHOIS data with realistic structure
-            is_available = domain.startswith("available")
-            results[domain] = {
-                "domain": domain,
-                "available": is_available,
-                "registered": not is_available,
-                "created_date": "2020-01-01T00:00:00Z" if not is_available else None,
-                "updated_date": "2023-05-15T00:00:00Z" if not is_available else None,
-                "expiry_date": "2025-01-01T00:00:00Z" if not is_available else None,
-                "registrar": "Example Registrar, Inc." if not is_available else None,
-                "registrant_name": "Domain Owner" if not is_available else None,
-                "registrant_organization": "Example Company" if not is_available else None,
-                "registrant_email": "private@example.com" if not is_available else None,
-                "name_servers": ["ns1.example.com", "ns2.example.com"] if not is_available else [],
-                "status": ["clientTransferProhibited", "serverUpdateProhibited"] if not is_available else [],
-                "raw_data": "Domain Name: EXAMPLE.COM\nRegistry Domain ID: 2336799_DOMAIN_COM-VRSN\nRegistrar WHOIS Server: whois.example-registrar.com\nRegistrar URL: http://www.example-registrar.com\nUpdated Date: 2023-05-15T00:00:00Z\nCreation Date: 2020-01-01T00:00:00Z\nRegistrar Registration Expiration Date: 2025-01-01T00:00:00Z\nRegistrar: Example Registrar, Inc.\nRegistrar IANA ID: 1234567\nRegistrar Abuse Contact Email: abuse@example-registrar.com\nRegistrar Abuse Contact Phone: +1.5555555555\nReseller: Example Reseller\nDomain Status: clientTransferProhibited https://icann.org/epp#clientTransferProhibited\nDomain Status: clientUpdateProhibited https://icann.org/epp#clientUpdateProhibited\nDomain Status: clientDeleteProhibited https://icann.org/epp#clientDeleteProhibited\nDomain Status: serverTransferProhibited https://icann.org/epp#serverTransferProhibited\nRegistrant Name: Domain Owner\nRegistrant Organization: Example Company\nRegistrant Street: 123 Example St.\nRegistrant City: Anytown\nRegistrant State/Province: NY\nRegistrant Postal Code: 12345\nRegistrant Country: US\nRegistrant Phone: +1.5555555555\nRegistrant Email: private@example.com\nAdmin Name: Admin Contact\nAdmin Organization: Example Company\nAdmin Email: admin@example.com\nTech Name: Tech Contact\nTech Organization: Example Company\nTech Email: tech@example.com\nName Server: NS1.EXAMPLE.COM\nName Server: NS2.EXAMPLE.COM\nDNSSEC: signedDelegation\nURL of the ICANN WHOIS Data Problem Reporting System: http://wdprs.internic.net/\n>>> Last update of WHOIS database: 2023-05-15T00:00:00Z <<<" if not is_available else "",
-                "last_checked": datetime.now().isoformat()
-            }
+            try:
+                # Use domain_checker to get WHOIS data
+                is_available, whois_data = is_domain_available(domain)
+                
+                # Format the response with proper None checks
+                result = {
+                    "domain": domain,
+                    "available": is_available,
+                    "registered": not is_available,
+                    "name_servers": [],
+                    "status": [],
+                    "raw_data": "",
+                    "last_checked": datetime.utcnow().isoformat()
+                }
+                
+                # Only try to access whois_data if it exists
+                if whois_data:
+                    # Safely get date fields
+                    for date_field in ['creation_date', 'updated_date', 'expiration_date']:
+                        if date_field in whois_data and whois_data[date_field]:
+                            if isinstance(whois_data[date_field], list):
+                                result[f"{date_field}"] = whois_data[date_field][0].isoformat() if whois_data[date_field] else None
+                            elif whois_data[date_field]:
+                                result[f"{date_field}"] = whois_data[date_field].isoformat() if hasattr(whois_data[date_field], 'isoformat') else whois_data[date_field]
+                    
+                    # Safely get other fields
+                    for field, whois_field in [
+                        ("registrar", "registrar"),
+                        ("registrant_name", "name"),
+                        ("registrant_organization", "org"),
+                        ("registrant_email", "email"),
+                    ]:
+                        if whois_field in whois_data and whois_data[whois_field]:
+                            result[field] = whois_data[whois_field]
+                    
+                    # Handle name servers and status
+                    if 'name_servers' in whois_data and whois_data['name_servers']:
+                        result['name_servers'] = whois_data['name_servers']
+                    
+                    if 'status' in whois_data and whois_data['status']:
+                        result['status'] = whois_data['status']
+                    
+                    if 'raw' in whois_data and whois_data['raw']:
+                        result['raw_data'] = whois_data['raw']
+                
+                results[domain] = result
+                
+            except Exception as e:
+                logger.error(f"Error looking up domain {domain}: {str(e)}", exc_info=True)
+                results[domain] = {
+                    "domain": domain,
+                    "error": f"Error looking up domain: {str(e)}",
+                    "available": False,
+                    "registered": False,
+                    "last_checked": datetime.utcnow().isoformat()
+                }
             
         return results
         

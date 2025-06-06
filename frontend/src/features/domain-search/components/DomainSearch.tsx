@@ -4,7 +4,6 @@ import { AdvancedSearchPanel } from './AdvancedSearchPanel';
 import { domainSearchApi } from '../api';
 import type { 
   DomainSearchResult, 
-  FilteredDomainInfoFE, 
   WhoisData,
   SearchFilters
 } from '../types';
@@ -100,28 +99,76 @@ export const DomainSearch: React.FC<DomainSearchProps> = ({
   // Handle search
   // Helper function to adapt WhoisData to DomainSearchResult format
   const adaptWhoisToDomainResult = (whoisData: WhoisData): DomainSearchResult => {
-    // Extract domain and TLD
-    const domainParts = whoisData.domain.split('.');
-    const tld = domainParts.length > 1 ? domainParts[domainParts.length - 1] : '';
-    
-    return {
-      domain: whoisData.domain,
-      tld: tld,
-      is_available: whoisData.available,
-      is_premium: false, // Default value as WhoisData doesn't have premium info
-      price: undefined,
-      analysis: {
-        linguistic: {
-          score: 0,
-          is_pronounceable: true,
-          syllable_count: 0,
-          word_count: 0
-        },
-        brand_archetype: 'unknown',
-        brand_confidence: 0,
-        trademark_risk: 'low'
+    try {
+      // Handle case where whoisData is null or undefined
+      if (!whoisData) {
+        console.error('No WHOIS data received');
+        throw new Error('No WHOIS data available');
       }
-    };
+
+      // Handle error case from backend
+      if ('error' in whoisData && whoisData.error) {
+        console.error('Error in WHOIS response:', whoisData.error);
+        throw new Error(whoisData.error);
+      }
+
+      // Ensure we have a valid domain
+      const domain = whoisData.domain || '';
+      if (!domain) {
+        console.error('No domain in WHOIS response:', whoisData);
+        throw new Error('Invalid domain in WHOIS response');
+      }
+
+      // Extract domain and TLD
+      const domainParts = domain.split('.');
+      const tld = domainParts.length > 1 ? domainParts[domainParts.length - 1] : '';
+      const domainName = domainParts[0] || '';
+      
+      // Calculate word count from domain name (split by hyphens and underscores)
+      const wordCount = domainName ? domainName.split(/[-_]/).filter(Boolean).length : 1;
+      
+      return {
+        domain: domain,
+        tld: tld,
+        is_available: whoisData.available || false,
+        is_premium: whoisData.is_premium || false,
+        price: whoisData.price,
+        whois_data: whoisData, // Include full WHOIS data for reference
+        analysis: {
+          linguistic: {
+            score: 0, // Default score, can be enhanced with domain analysis
+            is_pronounceable: true, // Default assumption
+            syllable_count: 0, // Could be calculated if needed
+            word_count: wordCount
+          },
+          brand_archetype: 'generic',
+          brand_confidence: 0, // Default confidence
+          trademark_risk: 'low' as const
+        }
+      };
+    } catch (error) {
+      console.error('Error adapting WHOIS data:', error);
+      // Return a fallback result that won't break the UI
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error processing WHOIS data';
+      return {
+        domain: 'error',
+        tld: 'com',
+        is_available: false,
+        is_premium: false,
+        error: errorMessage,
+        analysis: {
+          linguistic: {
+            score: 0,
+            is_pronounceable: false,
+            syllable_count: 0,
+            word_count: 0
+          },
+          brand_archetype: 'unknown',
+          brand_confidence: 0,
+          trademark_risk: 'low' as const
+        }
+      };
+    }
   };
   
   // Helper function to adapt FilteredDomainInfoFE to DomainSearchResult format
@@ -207,7 +254,7 @@ export const DomainSearch: React.FC<DomainSearchProps> = ({
   const handleSearch = useCallback(async () => {
     if (!query) return;
     
-    console.log('Initiating search with query:', query, 'and TLDs:', selectedTlds);
+    console.log('Initiating search with query:', query, 'and TLDs:', selectedTlds, 'isWhois:', isWhois);
     
     try {
       if (isWhois) {
@@ -220,18 +267,35 @@ export const DomainSearch: React.FC<DomainSearchProps> = ({
         const domainToCheck = query.includes('.') ? query : 
                                selectedTlds.length > 0 ? `${query}.${selectedTlds[0]}` : `${query}.com`;
         
-        const response = await domainSearchApi.whois(domainToCheck);
+        console.log('Sending WHOIS request for domain:', domainToCheck);
         
-        console.log('WHOIS response received:', response);
-        
-        if (!response || typeof response !== 'object') {
-          throw new Error('Invalid WHOIS response format');
+        try {
+          const response = await domainSearchApi.whois(domainToCheck);
+          console.log('WHOIS response received:', response);
+          
+          if (!response) {
+            throw new Error('Empty WHOIS response received');
+          }
+          
+          // Adapt WHOIS data to DomainSearchResult format
+          const adaptedResult = adaptWhoisToDomainResult(response);
+          console.log('Adapted WHOIS result:', adaptedResult);
+          
+          if (adaptedResult.error) {
+            throw new Error(adaptedResult.error);
+          }
+          
+          onSearchComplete([adaptedResult]);
+        } catch (error) {
+          console.error('Error in WHOIS search:', error);
+          const errorMessage = error instanceof Error ? error.message : 'Failed to fetch WHOIS data';
+          setError(errorMessage);
+          onSearchError(errorMessage);
+          // Still call onSearchComplete with an empty array to reset any loading states
+          onSearchComplete([]);
+        } finally {
+          setIsWhoisSearching(false);
         }
-        
-        // Adapt WHOIS data to DomainSearchResult format
-        const adaptedResult = adaptWhoisToDomainResult(response);
-        console.log('Adapted WHOIS result:', adaptedResult);
-        onSearchComplete([adaptedResult]);
       } else {
         // Domain search
         setIsSearching(true);

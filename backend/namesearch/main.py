@@ -36,11 +36,41 @@ app = FastAPI(
 # CORS middleware configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
+    allow_origins=[str(origin) for origin in settings.CORS_ORIGINS],
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
+    expose_headers=["*"],
+    max_age=600,  # Cache preflight requests for 10 minutes
 )
+
+# Add middleware to log and handle CORS requests
+@app.middleware("http")
+async def log_cors_requests(request: Request, call_next):
+    # Log incoming requests for debugging
+    print(f"Incoming request - Method: {request.method}, Path: {request.url.path}, Origin: {request.headers.get('origin')}")
+    
+    # Handle preflight requests
+    if request.method == "OPTIONS":
+        print(f"CORS Preflight Request - Origin: {request.headers.get('origin')}")
+        from fastapi.responses import JSONResponse
+        response = JSONResponse(
+            status_code=200,
+            content={"message": "CORS preflight successful"},
+        )
+    else:
+        response = await call_next(request)
+    
+    # Add CORS headers to all responses
+    origin = request.headers.get('origin')
+    if origin and origin in [str(o) for o in settings.CORS_ORIGINS]:
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = "*"
+    
+    print(f"Allowed Origins: {settings.CORS_ORIGINS}")
+    return response
 
 # Include API routers
 app.include_router(api_router, prefix="/api/v1")

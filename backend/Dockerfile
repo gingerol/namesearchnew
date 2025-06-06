@@ -17,7 +17,10 @@ WORKDIR /app
 
 # Install Python dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Install requirements without spaCy first
+RUN pip install --no-cache-dir -r requirements.txt \
+    && pip install --no-cache-dir spacy==3.7.2 \
+    && python -m spacy download en_core_web_sm --no-cache-dir
 
 # Copy project
 COPY . .

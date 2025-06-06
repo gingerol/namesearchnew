@@ -48,7 +48,7 @@ apiClient.interceptors.response.use(
 
 export const domainSearchApi = {
   async searchDomains(query: string, tlds?: string[], limit: number = 10): Promise<DomainSearchResponse> {
-    const response = await apiClient.post<DomainSearchResponse>('/domains/search', {
+    const response = await apiClient.post<DomainSearchResponse>('/domains', {
       query,
       tlds: tlds || ['com', 'io', 'ai', 'app', 'dev', 'net', 'org'],
       limit,
