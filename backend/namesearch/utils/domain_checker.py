@@ -30,7 +30,13 @@ def is_domain_available(domain: str) -> Tuple[bool, Optional[Dict[str, Any]]]:
         return False, None
     
     # Normalize domain (remove www. and convert to lowercase)
-    domain = domain.lower().replace('www.', '')
+    domain = domain.lower().strip()
+    domain = domain.replace('www.', '').replace('http://', '').replace('https://', '').split('/')[0]
+    
+    # Validate domain format
+    if not re.match(r'^([a-z0-9]+(-[a-z0-9]+)*\.)+[a-z]{2,}$', domain):
+        logger.warning(f"Invalid domain format: {domain}")
+        return False, None
     
     # Check cache first
     cached = get_cached_domain(domain)
@@ -44,34 +50,80 @@ def is_domain_available(domain: str) -> Tuple[bool, Optional[Dict[str, Any]]]:
     try:
         # Try to resolve the domain
         socket.gethostbyname(domain)
-        # If we get here, the domain exists
+        # If we get here, the domain exists and is registered
         result = (False, None)
     except (socket.gaierror, socket.herror):
         # Domain doesn't resolve, proceed with WHOIS check
         try:
-            w = whois.whois(domain)
+            # Set a timeout for the WHOIS lookup
+            socket.setdefaulttimeout(10)
             
-            # Check if domain is registered
-            if not w.domain_name:
-                result = (True, None)
-            # Check if domain is expired
-            elif hasattr(w, 'expiration_date'):
-                exp_date = w.expiration_date[0] if isinstance(w.expiration_date, list) else w.expiration_date
-                result = (exp_date and exp_date < datetime.now(), w if w.domain_name else None)
+            # Initialize WHOIS with more detailed parameters
+            w = whois.whois(
+                domain,
+                ignore_returncode=1,  # Don't raise exceptions on return codes
+                timeout=10,
+                cache_age=0,  # Don't use cache, we handle our own
+                slow_down=1,  # Add delay between requests
+                internationalized=True  # Handle IDNs
+            )
+            
+            # Convert WHOIS data to dict if it's not already
+            whois_data = dict(w) if not isinstance(w, dict) else w
+            
+            # Check for common availability indicators in the response
+            whois_str = str(whois_data).lower()
+            availability_indicators = [
+                "no match", "no data found", "not found", 
+                "no entries found", "no object found",
+                "no such domain", "domain not found"
+            ]
+            
+            if any(indicator in whois_str for indicator in availability_indicators):
+                result = (True, whois_data)
             else:
-                # If we have a domain name but no expiration date, assume it's registered
-                result = (False, w if w.domain_name else None)
-                
-        except (whois.parser.PywhoisError, Exception) as e:
+                # Check if we have a domain name in the response
+                if whois_data.get('domain_name'):
+                    # Check if domain is expired
+                    exp_date = whois_data.get('expiration_date')
+                    if exp_date:
+                        if isinstance(exp_date, list):
+                            exp_date = exp_date[0] if exp_date else None
+                        if exp_date and isinstance(exp_date, datetime) and exp_date < datetime.now():
+                            result = (True, whois_data)
+                            
+                    # If we have name servers, domain is likely registered
+                    if whois_data.get('name_servers'):
+                        result = (False, whois_data)
+                    else:
+                        # If we have a creation date but no name servers, still consider it registered
+                        if whois_data.get('creation_date'):
+                            result = (False, whois_data)
+                        else:
+                            # If we can't determine, assume available
+                            result = (True, whois_data)
+                else:
+                    # No domain name in response, assume available
+                    result = (True, whois_data)
+                    
+        except (whois.parser.PywhoisError, socket.timeout, Exception) as e:
             logger.warning(f"WHOIS lookup failed for {domain}: {str(e)}")
-            # If we can't get WHOIS info, assume the domain is available
-            result = (True, None)
+            # If we can't get WHOIS info, be conservative and assume registered
+            result = (False, None)
     
-    # Cache the result
-    cache_domain(domain, {
-        'is_available': result[0],
-        'whois_data': result[1]
-    })
+    # Cache the result with a TTL based on the result
+    # Shorter TTL for available domains to catch new registrations faster
+    ttl_hours = 1 if result[0] else 24  # 1 hour for available, 24 hours for registered
+    
+    cache_domain(
+        domain, 
+        {
+            'is_available': result[0],
+            'whois_data': result[1],
+            'expires_at': datetime.now() + timedelta(hours=ttl_hours)
+        },
+        ttl=ttl_hours * 3600  # Convert hours to seconds
+    )
     
     return result
 

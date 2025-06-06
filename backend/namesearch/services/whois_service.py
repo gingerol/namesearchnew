@@ -44,19 +44,79 @@ class WHOISService:
     
     @staticmethod
     def _determine_domain_status(whois_data: Dict) -> DomainStatus:
-        """Determine the status of a domain based on WHOIS data."""
-        if not whois_data.get("domain_name"):
-            return DomainStatus.AVAILABLE
-        
+        """
+        Determine the status of a domain based on WHOIS data.
+        Handles TLD-specific status messages and common patterns.
+        """
+        domain_name = whois_data.get("domain_name", "").lower()
+        if not domain_name:
+            return DomainStatus.UNKNOWN
+            
+        # Convert status to list if it's not already
         statuses = whois_data.get("status", [])
         if not isinstance(statuses, list):
-            statuses = [statuses]
+            statuses = [statuses] if statuses else []
+            
+        status_lower = [str(s).lower() for s in statuses if s]
+        whois_str = str(whois_data).lower()
         
-        status_lower = [s.lower() for s in statuses if s]
-        
-        if any(s in status_lower for s in ["clientdeleteprohibited", "clienttransferprohibited"]):
+        # TLD-specific handling
+        if domain_name.endswith(".ng"):
+            # .ng domains return "Not found" when available
+            if "not found" in whois_str:
+                return DomainStatus.AVAILABLE
             return DomainStatus.REGISTERED
+            
+        # Common availability indicators across TLDs
+        availability_indicators = [
+            "no match", 
+            "no data found", 
+            "not found",
+            "no entries found",
+            "no object found",
+            "no such domain",
+            "domain not found"
+        ]
         
+        if any(indicator in whois_str for indicator in availability_indicators):
+            return DomainStatus.AVAILABLE
+            
+        # Check for registered domain indicators
+        registered_indicators = [
+            "clientdeleteprohibited", 
+            "clienttransferprohibited",
+            "clientupdateprohibited",
+            "serverdeleteprohibited",
+            "servertransferprohibited",
+            "serverupdateprohibited",
+            "active",
+            "registered",
+            "ok",
+            "paid-till"
+        ]
+        
+        # If we have any registered indicators or statuses, domain is registered
+        if any(indicator in status_lower for indicator in registered_indicators):
+            return DomainStatus.REGISTERED
+            
+        # Check expiration date if available
+        if whois_data.get("expiration_date"):
+            exp_date = whois_data.get("expiration_date")
+            if isinstance(exp_date, list):
+                exp_date = exp_date[0] if exp_date else None
+                
+            if exp_date and isinstance(exp_date, datetime) and exp_date < datetime.now():
+                return DomainStatus.AVAILABLE
+                
+        # If we have a creation date but no explicit status, assume registered
+        if whois_data.get("creation_date"):
+            return DomainStatus.REGISTERED
+            
+        # If we have name servers, domain is likely registered
+        if whois_data.get("name_servers"):
+            return DomainStatus.REGISTERED
+            
+        # Default to unknown if we can't determine status
         return DomainStatus.UNKNOWN
     
     @classmethod
