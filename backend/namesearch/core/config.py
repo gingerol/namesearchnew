@@ -26,7 +26,31 @@ class Settings(BaseSettings):
     CORS_ORIGINS: List[AnyHttpUrl] = [
         "http://localhost:3000",  # Default frontend port
         "http://localhost:5000",  # Default backend port
+        "http://localhost:5001",  # Frontend dev server port
+        "http://localhost:5173",  # Vite dev server port
+        "http://127.0.0.1:3000",  # Alternative localhost
+        "http://127.0.0.1:5000",  # Alternative backend port
+        "http://127.0.0.1:5001",  # Alternative frontend dev port
+        "http://127.0.0.1:5173",  # Alternative Vite dev server port
     ]
+    
+    # Load CORS origins from environment variable if available
+    @validator("CORS_ORIGINS", pre=True)
+    @classmethod
+    def assemble_cors_origins(cls, v: Union[str, List[str], None], values: Dict[str, Any]) -> List[str]:
+        """Assemble CORS origins from environment variable."""
+        if v is None:
+            # Try to get from environment variable
+            import os
+            import json
+            env_origins = os.getenv("BACKEND_CORS_ORIGINS")
+            if env_origins:
+                try:
+                    return json.loads(env_origins.replace("'", '"'))
+                except json.JSONDecodeError:
+                    return v if v is not None else []
+            return v if v is not None else []
+        return v
     
     # Database
     POSTGRES_SERVER: str = "localhost"

@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useAuthForm, newPasswordSchema } from '../hooks/useAuthForm';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+// Using relative imports to avoid path alias issues
+import { Button } from '../../../components/ui/button';
+import { Input } from '../../../components/ui/input';
+import { Alert, AlertDescription } from '../../../components/ui/alert';
 import { AlertCircle, CheckCircle2, Loader2, Eye, EyeOff } from 'lucide-react';
+import { authApi } from '../api/authApi';
 
 export const ResetPasswordForm = () => {
   const [searchParams] = useSearchParams();
@@ -24,8 +25,7 @@ export const ResetPasswordForm = () => {
     submitError,
     handleChange,
     handleSubmit,
-    setFieldValue,
-  } = useAuthForm({
+  } = useAuthForm<{ password: string; confirmPassword: string; token: string; email: string }>({
     initialValues: {
       password: '',
       confirmPassword: '',
@@ -113,7 +113,9 @@ export const ResetPasswordForm = () => {
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-2">
-          <Label htmlFor="password">New Password</Label>
+          <label htmlFor="password" className="text-sm font-medium">
+            New Password
+          </label>
           <div className="relative">
             <Input
               id="password"
@@ -148,7 +150,9 @@ export const ResetPasswordForm = () => {
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="confirmPassword">Confirm New Password</Label>
+          <label htmlFor="confirmPassword" className="text-sm font-medium">
+            Confirm New Password
+          </label>
           <div className="relative">
             <Input
               id="confirmPassword"

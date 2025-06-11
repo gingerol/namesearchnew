@@ -6,21 +6,23 @@ import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 // Layouts
 import { Layout } from './components/layout/Layout';
 import { AdminLayout } from './components/layout/AdminLayout';
+import { PublicLayout } from './components/layout/PublicLayout';
 
 // Auth
 import { LoginPage } from './features/auth/LoginPage';
 import { SignUpPage } from './features/auth/SignUpPage';
 
 // Main App
-import { DashboardPage } from './features/dashboard/DashboardPage';
-import { DomainSearchPage } from './features/search/DomainSearchPage';
+import DashboardPage from './features/dashboard/DashboardPage';
+import DomainSearchPage from './features/search/DomainSearchPage';
+import { PublicDomainSearchPage } from './features/search/PublicDomainSearchPage';
 import { ProjectsPage } from './features/projects/ProjectsPage';
 import { WatchlistPage } from './features/watchlist/WatchlistPage';
 import { TrendsPage } from './features/trends/TrendsPage';
 import { AnalysisPage } from './features/analysis/AnalysisPage';
 
 // Admin
-import { AdminDashboard } from './features/admin/AdminDashboard';
+import AdminDashboard from './features/admin/AdminDashboard';
 import { UserManagement } from './features/admin/UserManagement';
 import { AdminProjects } from './features/admin/AdminProjects';
 import { AnalyticsPage } from './features/admin/AnalyticsPage';
@@ -30,6 +32,7 @@ import { SystemLogs } from './features/admin/SystemLogs';
 
 // Error
 import { NotFoundPage } from './features/error/NotFoundPage';
+import { useAuthStore } from './features/auth/store/authStore';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -41,29 +44,72 @@ const queryClient = new QueryClient({
 });
 
 function App() {
-  // In a real app, you would check for an auth token here
-  const isAuthenticated = false; // Will be replaced with actual auth check
+  // Get authentication state from the auth store
+  const { isAuthenticated, isLoading, isInitialized } = useAuthStore();
+  
+  // Show loading state only if we're still initializing
+  if (isLoading && !isInitialized) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
+      </div>
+    );
+  }
 
   return (
     <QueryClientProvider client={queryClient}>
-      <Router>
+      <Router
+        future={{
+          v7_startTransition: true,
+          v7_relativeSplatPath: true,
+        }}
+      >
         <Routes>
-          {/* Public routes */}
-          <Route path="/" element={isAuthenticated ? <Navigate to="/dashboard" /> : <Navigate to="/search" />} />
-          <Route path="/login" element={isAuthenticated ? <Navigate to="/dashboard" /> : <LoginPage />} />
-          <Route path="/signup" element={isAuthenticated ? <Navigate to="/dashboard" /> : <SignUpPage />} />
-          <Route path="/search" element={<DomainSearchPage />} />
+          {/* Root route - always redirects to search */}
+          <Route path="/" element={<Navigate to="/search" replace />} />
+          
+          {/* Public routes with public layout */}
+          <Route element={<PublicLayout><Outlet /></PublicLayout>}>
+            <Route path="/search" element={<PublicDomainSearchPage />} />
+            <Route path="/login" element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <LoginPage />} />
+            <Route path="/signup" element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <SignUpPage />} />
+            <Route path="/forgot-password" element={<div>Forgot Password Page</div>} />
+            <Route path="/reset-password" element={<div>Reset Password Page</div>} />
+            <Route path="/verify-email" element={<div>Verify Email Page</div>} />
+            <Route path="/pricing" element={<div>Pricing Page</div>} />
+            <Route path="/about" element={<div>About Page</div>} />
+            <Route path="/contact" element={<div>Contact Page</div>} />
+            <Route path="/terms" element={<div>Terms of Service</div>} />
+            <Route path="/privacy" element={<div>Privacy Policy</div>} />
+          </Route>
           
           {/* Protected routes - require authentication */}
-          <Route path="/" element={isAuthenticated ? <Layout><Outlet /></Layout> : <Navigate to="/search" />}>
-            <Route index element={<DashboardPage />} />
-            <Route path="dashboard" element={<DashboardPage />} />
-            <Route path="projects" element={<ProjectsPage />} />
-            <Route path="projects/:projectId" element={<DomainSearchPage />} />
-            <Route path="watchlist" element={<WatchlistPage />} />
-            <Route path="trends" element={<TrendsPage />} />
-            <Route path="analysis" element={<AnalysisPage />} />
-            <Route path="admin" element={<AdminLayout><Outlet /></AdminLayout>}>
+          <Route element={<Layout><Outlet /></Layout>}>
+            <Route path="dashboard" element={
+              isAuthenticated ? <DashboardPage /> : <Navigate to="/login" replace />
+            } />
+            <Route path="projects" element={
+              isAuthenticated ? <ProjectsPage /> : <Navigate to="/login" replace />
+            } />
+            <Route path="projects/:projectId" element={
+              isAuthenticated ? <DomainSearchPage /> : <Navigate to="/login" replace />
+            } />
+            <Route path="watchlist" element={
+              isAuthenticated ? <WatchlistPage /> : <Navigate to="/login" replace />
+            } />
+            <Route path="trends" element={
+              isAuthenticated ? <TrendsPage /> : <Navigate to="/login" replace />
+            } />
+            <Route path="analysis" element={
+              isAuthenticated ? <AnalysisPage /> : <Navigate to="/login" replace />
+            } />
+            <Route path="admin" element={
+              isAuthenticated ? (
+                <AdminLayout><Outlet /></AdminLayout>
+              ) : (
+                <Navigate to="/login" replace />
+              )}
+            >
               <Route index element={<AdminDashboard />} />
               <Route path="users" element={<UserManagement />} />
               <Route path="projects" element={<AdminProjects />} />

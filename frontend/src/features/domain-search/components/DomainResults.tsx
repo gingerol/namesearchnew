@@ -1,5 +1,6 @@
 import React from 'react';
 import type { DomainSearchResult } from '../types';
+import { WhoisResultCard } from './WhoisResultCard';
 
 interface DomainResultsProps {
   results: DomainSearchResult[];
@@ -149,46 +150,55 @@ export const DomainResults: React.FC<DomainResultsProps> = ({
                 }`}
                 onClick={() => result.is_available && onSelect?.(result.domain)}
               >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center">
-                    <div className="text-lg font-medium text-gray-900">
-                      <span className="font-bold">{domainName}</span>
-                      <span className="text-gray-500">.{domainTld}</span>
+                <div className="flex flex-col">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center">
+                      <div className="text-lg font-medium text-gray-900">
+                        <span className="font-bold">{domainName}</span>
+                        <span className="text-gray-500">.{domainTld}</span>
+                      </div>
+                      
+                      <div className="ml-4 flex-shrink-0">
+                        {result.is_available ? (
+                          <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                            Available
+                          </span>
+                        ) : (
+                          <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                            Taken
+                          </span>
+                        )}
+                        
+                        {result.is_premium && (
+                          <span className="ml-2 px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                            Premium
+                          </span>
+                        )}
+                      </div>
                     </div>
                     
-                    <div className="ml-4 flex-shrink-0">
-                      {result.is_available ? (
-                        <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                          Available
-                        </span>
-                      ) : (
-                        <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                          Taken
-                        </span>
-                      )}
-                      
-                      {result.is_premium && (
-                        <span className="ml-2 px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                          Premium
-                        </span>
-                      )}
-                    </div>
+                    {result.is_available && (
+                      <div className="text-right">
+                        {result.price ? (
+                          <>
+                            <span className="text-2xl font-bold text-gray-900">
+                              ${result.price}
+                            </span>
+                            <span className="text-sm text-gray-500 ml-1">/year</span>
+                          </>
+                        ) : (
+                          <span className="text-green-600 font-medium">
+                            Register
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
                   
-                  {result.is_available && (
-                    <div className="text-right">
-                      {result.price ? (
-                        <>
-                          <span className="text-2xl font-bold text-gray-900">
-                            ${result.price}
-                          </span>
-                          <span className="text-sm text-gray-500 ml-1">/year</span>
-                        </>
-                      ) : (
-                        <span className="text-green-600 font-medium">
-                          Register
-                        </span>
-                      )}
+                  {/* Show WHOIS info if available */}
+                  {result.whois_data && (
+                    <div className="mt-3 border-t border-gray-100 pt-3">
+                      <WhoisResultCard result={result} className="shadow-none border border-gray-200" />
                     </div>
                   )}
                 </div>

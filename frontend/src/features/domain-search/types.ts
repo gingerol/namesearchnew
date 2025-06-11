@@ -15,6 +15,9 @@ export interface WhoisData {
   status: string[];
   raw_data?: string;
   last_checked: string;
+  is_premium?: boolean;
+  price?: number;
+  error?: string;
 }
 
 export interface DomainAnalysis {
@@ -35,6 +38,8 @@ export interface DomainSearchResult {
   is_available: boolean;
   is_premium: boolean;
   price?: number;
+  whois_data?: WhoisData;
+  error?: string;
   analysis: DomainAnalysis;
 }
 

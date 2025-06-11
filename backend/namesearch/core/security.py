@@ -59,6 +59,37 @@ def get_current_user(
         raise credentials_exception
     return db_user
 
+def get_current_user_optional(
+    db: Session = Depends(get_db),
+    token: str = Depends(oauth2_scheme),
+) -> Optional[models.User]:
+    """
+    Get the current user from the token if available, otherwise return None.
+    
+    Args:
+        db: Database session.
+        token: Optional JWT token from the Authorization header.
+        
+    Returns:
+        Optional[User]: The authenticated user if token is valid, None otherwise.
+    """
+    if not token:
+        return None
+        
+    try:
+        payload = decode_token(token)
+        email: str = payload.get("sub")
+        if email is None:
+            return None
+            
+        user = db.query(models.User).filter(models.User.email == email).first()
+        if user is None:
+            return None
+            
+        return user
+    except (JWTError, ValidationError):
+        return None
+
 def get_current_active_user(
     current_user: models.User = Depends(get_current_user),
 ) -> models.User:

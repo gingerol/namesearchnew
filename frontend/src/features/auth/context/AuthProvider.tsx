@@ -1,6 +1,7 @@
-import React, { createContext, useContext, useEffect, useMemo, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useCallback, useState } from 'react';
+import type { ReactNode, FC } from 'react';
 import { useAuthStore } from '../store/authStore';
-import { useApiError } from '@/hooks/useApiError';
+import { useApiError } from '../../../hooks/useApiError';
 import { authApi } from '../api/authApi';
 import { toast } from 'sonner';
 
@@ -27,13 +28,18 @@ interface AuthContextType {
   clearError: () => void;
 }
 
+interface TokenResponse {
+  accessToken: string;
+  refreshToken: string;
+}
+
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 interface AuthProviderProps {
   children: ReactNode;
 }
 
-export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
+export const AuthProvider: FC<AuthProviderProps> = ({ children }) => {
   const {
     user,
     accessToken,
@@ -41,17 +47,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     isAuthenticated,
     isLoading,
     error: authError,
-    login: loginToStore,
-    register: registerToStore,
     logout: logoutFromStore,
-    setAuthState,
     clearError: clearAuthError,
   } = useAuthStore();
   
   const { error: apiError, showError, clearError: clearApiError } = useApiError();
   
-  const [isInitializing, setIsInitializing] = React.useState(true);
-  const [isVerifying, setIsVerifying] = React.useState(false);
+  const [isInitializing, setIsInitializing] = useState(true);
+  const [isVerifying, setIsVerifying] = useState(false);
   
   // Clear any errors when the component unmounts
   useEffect(() => {
@@ -81,27 +84,35 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   }, [storedRefreshToken]);
   
   // Handle token refresh
-  const refreshToken = async (): Promise<boolean> => {
+  const refreshToken = useCallback(async (): Promise<boolean> => {
     if (!storedRefreshToken) return false;
     
     try {
-      const { accessToken: newAccessToken, refreshToken: newRefreshToken } = 
-        await authApi.refreshToken(storedRefreshToken);
+      const response = await authApi.refreshToken(storedRefreshToken) as TokenResponse;
       
-      setAuthState({
-        accessToken: newAccessToken,
-        refreshToken: newRefreshToken,
+      // Update auth store with new tokens
+      useAuthStore.setState({
+        accessToken: response.accessToken,
+        refreshToken: response.refreshToken,
         isAuthenticated: true,
       });
       
       return true;
     } catch (error) {
       console.error('Failed to refresh token:', error);
-      // Clear auth state if refresh fails
-      logoutFromStore();
+      // Call logout directly instead of using the function to avoid circular dependency
+      try {
+        if (accessToken) {
+          await authApi.logout();
+        }
+      } catch (logoutError) {
+        console.error('Error during logout after token refresh failed:', logoutError);
+      } finally {
+        logoutFromStore();
+      }
       return false;
     }
-  };
+  }, [storedRefreshToken, accessToken, logoutFromStore]);
   
   // Login handler
   const login = async (email: string, password: string) => {
@@ -111,7 +122,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       // Get user data from the token
       const userData = JSON.parse(atob(accessToken.split('.')[1]));
       
-      setAuthState({
+      useAuthStore.setState({
         user: userData,
         accessToken,
         refreshToken,
@@ -136,20 +147,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
   
-  // Logout handler
-  const logout = async () => {
-    try {
-      if (accessToken) {
-        await authApi.logout();
-      }
-    } catch (error) {
-      console.error('Error during logout:', error);
-      // Continue with logout even if the API call fails
-    } finally {
-      logoutFromStore();
-      toast.success('Successfully logged out');
-    }
-  };
+
   
   // Password reset request handler
   const requestPasswordReset = async (email: string) => {
@@ -181,7 +179,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       
       // Update user verification status
       if (user) {
-        setAuthState({
+        useAuthStore.setState({
           user: { ...user, isVerified: true },
         });
       }
@@ -206,19 +204,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
   
-  // Combine errors from both auth store and API
-  const error = useMemo(() => {
-    return authError || apiError;
-  }, [authError, apiError]);
-  
-  // Clear error handler
-  const clearError = useCallback(() => {
-    clearAuthError();
-    clearApiError();
-  }, [clearAuthError, clearApiError]);
-  
+  // Logout handler
+  const logout = useCallback(async () => {
+    try {
+      await logoutFromStore();
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
+  }, [logoutFromStore]);
+
   // Memoize the context value to prevent unnecessary re-renders
-  const contextValue = useMemo(() => ({
+  const value = useMemo((): AuthContextType => ({
     isAuthenticated,
     isInitializing,
     isVerifying,
@@ -232,20 +228,33 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     verifyEmail,
     resendVerificationEmail,
     isLoading,
-    error,
-    clearError,
+    error: authError || apiError ? new Error(authError || apiError?.message || 'An error occurred') : null,
+    clearError: () => {
+      clearAuthError();
+      clearApiError();
+    },
   }), [
     isAuthenticated,
     isInitializing,
     isVerifying,
     user,
+    login,
+    register,
+    logout,
+    refreshToken,
+    requestPasswordReset,
+    resetPassword,
+    verifyEmail,
+    resendVerificationEmail,
     isLoading,
-    error,
-    clearError,
+    authError,
+    apiError,
+    clearAuthError,
+    clearApiError,
   ]);
   
   return (
-    <AuthContext.Provider value={contextValue}>
+    <AuthContext.Provider value={value}>
       {!isInitializing ? children : (
         <div className="flex h-screen w-full items-center justify-center">
           <div className="flex flex-col items-center space-y-4">
