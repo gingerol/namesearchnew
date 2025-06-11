@@ -339,77 +339,6 @@ async def search_domains(
     # Special handling for specific queries that cause issues
     query_lower = search_in.query.strip().lower()
     
-    # Special case for 'dear' query
-    if query_lower == 'dear':
-        return {
-            "results": [
-                {
-                    "domain": "dear.com",
-                    "tld": "com",
-                    "is_available": True,
-                    "status": "available",
-                    "is_premium": False,
-                    "price": None,
-                    "currency": "USD",
-                    "whois_data": None
-                },
-                {
-                    "domain": "dear.io",
-                    "tld": "io",
-                    "is_available": True,
-                    "status": "premium",
-                    "is_premium": True,
-                    "price": 1999.99,
-                    "currency": "USD",
-                    "whois_data": None
-                }
-            ],
-            "total": 2,
-            "available": 2,
-            "taken": 0,
-            "premium": 1
-        }
-    
-    # Special case for 'search' query
-    if query_lower == 'search':
-        return {
-            "results": [
-                {
-                    "domain": "search.com",
-                    "tld": "com",
-                    "is_available": False,
-                    "status": "registered",
-                    "is_premium": False,
-                    "price": None,
-                    "currency": "USD",
-                    "whois_data": None
-                },
-                {
-                    "domain": "search.io",
-                    "tld": "io",
-                    "is_available": True,
-                    "status": "premium",
-                    "is_premium": True,
-                    "price": 2499.99,
-                    "currency": "USD",
-                    "whois_data": None
-                },
-                {
-                    "domain": "search.ai",
-                    "tld": "ai",
-                    "is_available": False,
-                    "status": "registered",
-                    "is_premium": False,
-                    "price": None,
-                    "currency": "USD",
-                    "whois_data": None
-                }
-            ],
-            "total": 3,
-            "available": 1,
-            "taken": 2,
-            "premium": 1
-        }
     try:
         logger.info(f"Received search request with query: {search_in.query}, TLDs: {search_in.tlds}, limit: {search_in.limit}")
         
@@ -441,46 +370,55 @@ async def search_domains(
             tlds = tlds[:max_tlds]
             logger.warning(f"Too many TLDs requested, limiting to first {max_tlds}")
         
-        # Generate mock results
+        # Generate real results
         results = []
         available_count = 0
         taken_count = 0
         premium_count = 0
         
-        # Generate domains for each TLD
         for tld in tlds[:search_in.limit]:
             domain = f"{search_in.query.lower().strip()}.{tld}"
-            is_available = random.choice([True, False])
-            is_premium = False
-            price = None
-            
-            if is_available:
-                available_count += 1
-                # 20% chance of being premium
-                if random.random() < 0.2:
-                    is_premium = True
-                    price = round(random.uniform(100, 5000), 2)
-                    premium_count += 1
-            else:
-                taken_count += 1
-            
-            # Determine status based on availability and premium status
-            if is_premium:
-                status = "premium"
-            elif is_available:
-                status = "available"
-            else:
-                status = "registered"  # Using 'registered' instead of 'taken' to match schema
-                
-            results.append({
-                "domain": domain,
-                "tld": tld,
-                "is_available": is_available,
-                "status": status,
-                "is_premium": is_premium,
-                "price": price,
-                "currency": "USD"  # Always return a string, even for None prices
-            })
+            try:
+                availability_info = is_domain_available(domain)
+                is_available = availability_info.get("is_available", False)
+                is_premium = availability_info.get("is_premium", False)
+                whois_data = availability_info.get("whois_data", None)
+                price = None
+                currency = "USD"
+                if is_available:
+                    available_count += 1
+                    pricing_info = get_domain_pricing(domain)
+                    if pricing_info:
+                        price = pricing_info.get("price")
+                        currency = pricing_info.get("currency", "USD")
+                    if is_premium:
+                        premium_count += 1
+                else:
+                    taken_count += 1
+                status = "premium" if is_premium else ("available" if is_available else "registered")
+                results.append({
+                    "domain": domain,
+                    "tld": tld,
+                    "is_available": is_available,
+                    "status": status,
+                    "is_premium": is_premium,
+                    "price": price,
+                    "currency": currency,
+                    "whois_data": whois_data
+                })
+            except Exception as e:
+                logger.error(f"Error checking domain {domain}: {str(e)}")
+                results.append({
+                    "domain": domain,
+                    "tld": tld,
+                    "is_available": False,
+                    "status": "error",
+                    "is_premium": False,
+                    "price": None,
+                    "currency": "USD",
+                    "whois_data": None,
+                    "error": str(e)
+                })
         
         # Log the search (in a real app, this would be async)
         # --- RESTORED DB LOGGING ---
