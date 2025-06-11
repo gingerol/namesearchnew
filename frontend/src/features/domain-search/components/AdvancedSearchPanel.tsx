@@ -11,6 +11,7 @@ interface AdvancedSearchPanelProps {
   onClose: () => void;
   initialFilters?: Partial<SearchFilters>;
   availableTlds?: string[];
+  onApply?: (filters: Partial<SearchFilters>) => void;
 }
 
 const defaultFilters: SearchFilters = {
@@ -70,6 +71,7 @@ export const AdvancedSearchPanel: React.FC<AdvancedSearchPanelProps> = ({
   onClose,
   initialFilters = {},
   availableTlds = [],
+  onApply,
 }) => {
   // Get store state and actions
   const { 
@@ -241,44 +243,45 @@ export const AdvancedSearchPanel: React.FC<AdvancedSearchPanelProps> = ({
     }
   }, [filters, onClose, setCurrentFilters, fetchAdvancedSearchResults]);
 
+  // Escape key closes the panel
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleEsc);
+    return () => window.removeEventListener('keydown', handleEsc);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   return (
     <div
-      className={`fixed inset-0 overflow-hidden transition-all duration-300 ease-in-out z-[9999] ${
-        isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
-      }`}
-      style={{
-        backgroundColor: isOpen ? 'rgba(0, 0, 0, 0.5)' : 'transparent',
-        transition: 'background-color 300ms ease-in-out'
-      }}
+      className={`fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40 transition-opacity duration-300 ${isOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
       onClick={onClose}
+      tabIndex={-1}
+      aria-modal="true"
+      role="dialog"
     >
-      <div className="absolute inset-0 overflow-hidden">
-        <div className="pointer-events-none fixed inset-y-0 right-0 flex max-w-full">
-          <div 
-            className="pointer-events-auto w-screen max-w-md transform transition-transform duration-300 ease-in-out"
-            style={{
-              transform: isOpen ? 'translateX(0)' : 'translateX(100%)'
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex h-full flex-col overflow-y-auto bg-white py-6 shadow-xl" style={{ maxHeight: '100vh' }}>
-              <div className="flex-1 overflow-y-auto py-6 px-4 sm:px-6">
-                <div className="flex items-start justify-between">
-                  <h2 className="text-lg font-medium text-gray-900">Advanced Search</h2>
-                  <button
-                    type="button"
-                    className="text-gray-400 hover:text-gray-500"
-                    onClick={onClose}
-                  >
-                    <X className="h-6 w-6" />
-                  </button>
-                </div>
+      <div className="relative w-full max-w-md bg-white rounded-lg shadow-xl pointer-events-auto" onClick={e => e.stopPropagation()}>
+        <div className="flex h-full flex-col overflow-y-auto py-6" style={{ maxHeight: '90vh' }}>
+          <div className="flex items-start justify-between px-4 sm:px-6">
+            <h2 className="text-lg font-medium text-gray-900">Advanced Search</h2>
+            <button
+              type="button"
+              className="text-gray-400 hover:text-gray-500"
+              onClick={onClose}
+              aria-label="Close advanced search"
+            >
+              <X className="h-6 w-6" />
+            </button>
+          </div>
 
-                {/* Search Form */}
-                <form onSubmit={handleSubmit} className="mt-6 space-y-6">
-                  {/* Price Range */}
+          {/* Search Form */}
+          <form onSubmit={handleSubmit} className="mt-6 space-y-6 px-4 sm:px-6">
+            {/* Price Range */}
                   <div>
                     <h3 className="text-sm font-medium text-gray-700 mb-3">Price Range ($)</h3>
                     <div className="grid grid-cols-2 gap-4">
@@ -756,6 +759,12 @@ export const AdvancedSearchPanel: React.FC<AdvancedSearchPanelProps> = ({
                       </button>
                       <button
                         type="submit"
+                        onClick={e => {
+                          e.preventDefault();
+                          if (typeof onApply === 'function') {
+                            onApply(filters);
+                          }
+                        }}
                         className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                       >
                         <Save className="-ml-1 mr-2 h-4 w-4" />
@@ -767,8 +776,7 @@ export const AdvancedSearchPanel: React.FC<AdvancedSearchPanelProps> = ({
               </div>
             </div>
           </div>
-        </div>
-      </div>
-    </div>
-  );
+      );
 };
+
+export default AdvancedSearchPanel;
