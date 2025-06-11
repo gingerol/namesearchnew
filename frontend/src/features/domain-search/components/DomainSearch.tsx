@@ -264,8 +264,16 @@ export const DomainSearch: React.FC<DomainSearchProps> = ({
         onSearchStart(query, selectedTlds, activeFilters);
         
         console.log('Initiating WHOIS search for:', query);
-        const domainToCheck = query.includes('.') ? query : 
-                               selectedTlds.length > 0 ? `${query}.${selectedTlds[0]}` : `${query}.com`;
+        let domainToCheck = query;
+        if (selectedTlds.length > 0) {
+          const selectedTld = selectedTlds[0].replace(/^\./, ''); // remove leading dot if present
+          // Only append if not already ending with the selected TLD
+          if (!domainToCheck.toLowerCase().endsWith(`.${selectedTld.toLowerCase()}`)) {
+            domainToCheck = `${domainToCheck}.${selectedTld}`;
+          }
+        } else if (!domainToCheck.includes('.')) {
+          domainToCheck = `${domainToCheck}.com`;
+        }
         
         console.log('Sending WHOIS request for domain:', domainToCheck);
         
