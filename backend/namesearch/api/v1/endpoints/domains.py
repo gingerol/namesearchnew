@@ -483,7 +483,9 @@ async def search_domains(
             })
         
         # Log the search (in a real app, this would be async)
+        # --- RESTORED DB LOGGING ---
         try:
+            # Only include fields that are actual columns on the Search ORM model
             search_data = {
                 "query": search_in.query,
                 "search_type": "bulk",
@@ -495,12 +497,14 @@ async def search_domains(
                 "completed_at": datetime.utcnow(),
                 "status": "completed"
             }
-            search = Search(**search_data)
+            search = models.domain.Search(**search_data)
             db.add(search)
             db.commit()
+            logger.info(f"[DB LOGGING] Successfully logged search: {search_data}")
         except Exception as e:
-            logger.warning(f"Could not log search to database: {str(e)}")
+            logger.warning(f"[DB LOGGING] Failed to log search to database: {str(e)}")
             db.rollback()
+        # --- END RESTORED DB LOGGING ---
         
         logger.info(f"Search completed for '{search_in.query}'. Found {len(results)} results ({available_count} available, {premium_count} premium)")
         
